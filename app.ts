@@ -35,10 +35,13 @@ class SceneGrid extends Phaser.Scene {
     grid_rows = 16;
     grid_cols = 8;
     grid: integer[] = Array(this.grid_rows * this.grid_cols);
-    cells_active: [number, number, integer][] = Array();
+    active_pos_row = 0;
+    active_pos_col = 0;
+    active_rotation = 0;
+    cells_active: integer[] = Array();
 
     grid_display: (Phaser.GameObjects.Sprite | null)[] = Array(this.grid_rows * this.grid_cols);
-    cells_active_display: Phaser.GameObjects.Sprite[] = Array();
+    cells_active_display: (Phaser.GameObjects.Sprite | null)[] = Array();
 
     col_to_x(col: integer): integer {
         // cols go from left (0) to right (7)
@@ -86,6 +89,64 @@ class SceneGrid extends Phaser.Scene {
         return sprite;
     }
 
+    cell_active_to_scene(row: integer, col: integer, rotation: integer, index: number, cell_value: integer): Phaser.GameObjects.Sprite | null {
+        // In 0th rotation, first cell is at the row and col, second cell is to the right.
+        let join1 = 0;
+        let join2 = 0;
+        if (rotation == 0) {
+            col += index;
+            join1 = cell_joined_right;
+            join2 = cell_joined_left;
+        } else if (rotation == 1) {
+            // In 1st rotation, first cell is at row and col, second cell is above.
+            row += index;
+            join1 = cell_joined_top;
+            join2 = cell_joined_bottom;
+        } else if (rotation == 2) {
+            // In 2nd rotation, first cell is to the right, second cell is at row and col.
+            col += 1 - index;
+            join1 = cell_joined_left;
+            join2 = cell_joined_right;
+        } else if (rotation == 3) {
+            // In 3rd rotation, first cell is above, second cell is at row and col.
+            row += 1 - index;
+            join1 = cell_joined_bottom;
+            join2 = cell_joined_top;
+        }
+
+        // Use the correct join depending on which active cell we're looking at
+        cell_value &= cell_types_filter;
+        if (index == 0) {
+            cell_value |= join1;
+        } else {
+            cell_value |= join2;
+        }
+        return this.cell_to_scene(row, col, cell_value);
+    }
+
+    cell_active_update_pos(row: integer, col: integer, rotation: integer, index: number, sprite: Phaser.GameObjects.Sprite | null): void {
+        if (sprite == null) {
+            return;
+        }
+
+        // In 0th rotation, first cell is at the row and col, second cell is to the right.
+        let join1 = 0;
+        let join2 = 0;
+        if (rotation == 0) {
+            col += index;
+        } else if (rotation == 1) {
+            // In 1st rotation, first cell is at row and col, second cell is above.
+            row += index;
+        } else if (rotation == 2) {
+            // In 2nd rotation, first cell is to the right, second cell is at row and col.
+            col += 1 - index;
+        } else if (rotation == 3) {
+            // In 3rd rotation, first cell is above, second cell is at row and col.
+            row += 1 - index;
+        }
+        sprite.setPosition(this.col_to_x(col), this.row_to_y(row));
+    }
+
     grid_set(row: number, col: number, cell_value: integer) {
         let index = row * this.grid_cols + col;
         let old_cell = this.grid[index];
@@ -108,18 +169,44 @@ class SceneGrid extends Phaser.Scene {
         }
     }
 
-    cells_active_can_move(row_delta: number, col_delta: number): boolean {
-        if (this.cells_active.some((cell) => cell[1] + col_delta < 0)) {
-            return false;
-        } else if (this.cells_active.some((cell) => cell[1] + col_delta > this.grid_cols - 1)) {
-            return false;
-        } else if (this.cells_active.some((cell) => cell[0] + row_delta < 0)) {
-            return false
-        } else if (this.cells_active.some((cell) => cell[0] + row_delta > this.grid_rows - 1)) {
-            return false;
+    cells_active_can_move(pos_row: number, pos_col: number, rotation: number): boolean {
+        // NOTE: It may be possible to rotate if the active cells can shift left one
+
+        let legit = true;
+
+        // If horizontal, check at pos and to the right.
+        if (rotation % 2 == 0) {
+            legit = legit && (pos_row >= 0) && (pos_row <= this.grid_rows - 1)
+                && (pos_col >= 0) && (pos_col <= this.grid_cols - 2);
+            legit = legit
+                && this.grid[(pos_row * this.grid_cols) + pos_col] == cell_empty
+                && this.grid[(pos_row * this.grid_cols) + pos_col + 1] == cell_empty;
+        } else {
+            // If vertical, check at pos and above.
+            legit = legit && (pos_row >= 0) && (pos_row <= this.grid_rows - 2)
+                && (pos_col >= 0) && (pos_col <= this.grid_cols - 1);
+            legit = legit
+                && this.grid[(pos_row * this.grid_cols) + pos_col] == cell_empty
+                && this.grid[((pos_row + 1) * this.grid_cols) + pos_col] == cell_empty;
         }
-        //return true;
-        return this.cells_active.every((cell) => this.grid[((cell[0] + row_delta) * this.grid_cols) + (cell[1] + col_delta)] == cell_empty);
+
+        return legit;
+        // return this.cells_active.every((cell, index) => this.grid[(pos_row * this.grid_cols) + (pos_col + index)] == cell_empty);
+    }
+
+    received_rotate(): void {
+        // If the active cells can rotate, then go
+        let rotation = (this.active_rotation + 1) % 4
+        if (this.cells_active_can_move(this.active_pos_row, this.active_pos_col, rotation)) {
+            this.active_rotation = rotation;
+            
+            // Update display
+            // Delete the current sprites then create new ones at correct position
+            while (this.cells_active_display.length) {
+                this.cells_active_display.shift()?.destroy();
+            }
+            this.cells_active.forEach((cell, index) => this.cells_active_display.push(this.cell_active_to_scene(this.active_pos_row, this.active_pos_col, this.active_rotation, index, cell)));
+        }
     }
 
     preload(): void {
@@ -138,16 +225,11 @@ class SceneGrid extends Phaser.Scene {
         this.grid_set(15, 7, cell_3);
 
         // Add the active cells to board
-        this.cells_active.push([7, 3, cell_joined_right | cell_1], [7, 4, cell_joined_left | cell_2])
-        let left_active = this.add.sprite(this.col_to_x(3), this.row_to_y(7), 'joined');
-        left_active.setScale(0.125, 0.125);
-        left_active.setTint(0xff0000);
-        this.cells_active_display.push(left_active);
-        let right_active = this.add.sprite(this.col_to_x(4), this.row_to_y(7), 'joined');
-        right_active.setTint(0x00ff00);
-        right_active.setScale(0.125, 0.125);
-        right_active.flipX = true;
-        this.cells_active_display.push(right_active);
+        this.active_pos_row = 7;
+        this.active_pos_col = 3;
+        this.active_rotation = 0;
+        this.cells_active.push(cell_1, cell_2)
+        this.cells_active.forEach((cell, index) => this.cells_active_display.push(this.cell_active_to_scene(this.active_pos_row, this.active_pos_col, this.active_rotation, index, cell)));
         // this.grid_set(7, 3, cell_joined_right | cell_1)
         // this.grid_set(7, 4, cell_joined_left | cell_2)
 
@@ -156,66 +238,52 @@ class SceneGrid extends Phaser.Scene {
         // this.grid_set(6, 3, cell_joined_top | cell_3)
         if (this.input.keyboard !== null) {
             this.cursors = this.input.keyboard.createCursorKeys();
+            this.cursors.space.on('down', this.received_rotate, this);
         }
     }
 
     update(time: number, delta: number): void {
+        // TODO Every 2/3 sec drop the active cells one row.
+        let changed = false;
+
         if (this.cursors !== undefined) {
             if (this.cursors.left.isDown) {
                 // If the active cells can go left, then go.
-                if (this.cells_active_can_move(0, -1)) {
-                    this.cells_active.forEach((cell) => {
-                        // this.grid_set(cell[0], cell[1], cell_empty);
-                    });
-                    this.cells_active.forEach((cell) => {
-                        cell[1] -= 1;
-                        // this.grid_set(cell[0], cell[1], cell[2]);
-                    });
+                if (this.cells_active_can_move(this.active_pos_row, this.active_pos_col - 1, this.active_rotation)) {
+                    --this.active_pos_col;
+                    changed = true;
                 }
             }
             if (this.cursors.right.isDown) {
                 // If the active cells can go right, then go.
-                if (this.cells_active_can_move(0, 1)) {
-                    this.cells_active.forEach((cell) => {
-                        // this.grid_set(cell[0], cell[1], cell_empty);
-                    });
-                    this.cells_active.forEach((cell) => {
-                        cell[1] += 1;
-                        // this.grid_set(cell[0], cell[1], cell[2]);
-                    });
+                if (this.cells_active_can_move(this.active_pos_row, this.active_pos_col + 1, this.active_rotation)) {
+                    ++this.active_pos_col;
+                    changed = true;
                 }
             }
             if (this.cursors.up.isDown) {
                 // If the active cells can go up, then go.
-                if (this.cells_active_can_move(1, 0)) {
-                    this.cells_active.forEach((cell) => {
-                        // this.grid_set(cell[0], cell[1], cell_empty);
-                    });
-                    this.cells_active.forEach((cell) => {
-                        cell[0] += 1;
-                        // this.grid_set(cell[0], cell[1], cell[2]);
-                    });
+                if (this.cells_active_can_move(this.active_pos_row + 1, this.active_pos_col, this.active_rotation)) {
+                    ++this.active_pos_row;
+                    changed = true;
                 }
             }
             if (this.cursors.down.isDown) {
                 // If the active cells can go down, then go.
-                if (this.cells_active_can_move(-1, 0)) {
-                    this.cells_active.forEach((cell) => {
-                        // this.grid_set(cell[0], cell[1], cell_empty);
-                    });
-                    this.cells_active.forEach((cell) => {
-                        cell[0] -= 1;
-                        // this.grid_set(cell[0], cell[1], cell[2]);
-                    });
+                if (this.cells_active_can_move(this.active_pos_row - 1, this.active_pos_col, this.active_rotation)) {
+                    --this.active_pos_row;
+                    changed = true;
                 }
             }
-            // Update the positions of the active cells
-            this.cells_active_display.forEach((sprite: Phaser.GameObjects.Sprite, index) => {
-                sprite.setPosition(this.col_to_x(this.cells_active[index][1]), this.row_to_y(this.cells_active[index][0]))
-            });
+
+            // Update the positions of the active cells if anything changed
+            if (changed) {
+                this.cells_active_display.forEach((sprite: Phaser.GameObjects.Sprite | null, index) => 
+                  this.cell_active_update_pos(this.active_pos_row, this.active_pos_col, this.active_rotation, index, sprite));
+            }
         }
         if (this.debugText != undefined) {
-            this.debugText.setText("time: " + time + "\ndelta: " + delta + "\n" + this.cells_active);
+            this.debugText.setText("time: " + time + "\ndelta: " + delta + "\n" + this.active_pos_row + "," + this.active_pos_col + "," + this.active_rotation);
         }
     }
 }
