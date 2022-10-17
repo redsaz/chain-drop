@@ -28,9 +28,17 @@ const cell_1 = 0b0000_0001;
 const cell_2 = 0b0000_0010;
 const cell_3 = 0b0000_0011;
 
+const shift_ticks_repeat_delay = 15;
+const shift_ticks_repeat_rate = 6;
+const shove_ticks_repeat_delay = 2;
+
 class SceneGrid extends Phaser.Scene {
     cursors: Phaser.Types.Input.Keyboard.CursorKeys | undefined;
     debugText: Phaser.GameObjects.Text | undefined;
+
+    tick_duration = 1000 / 60;
+    ticks: number = 0;
+    ticks_leftover: number = 0; // sometimes a little extra or a little less delta is between updates.
 
     grid_rows = 16;
     grid_cols = 8;
@@ -42,6 +50,12 @@ class SceneGrid extends Phaser.Scene {
 
     grid_display: (Phaser.GameObjects.Sprite | null)[] = Array(this.grid_rows * this.grid_cols);
     cells_active_display: (Phaser.GameObjects.Sprite | null)[] = Array();
+
+    // How many ticks the button for the action has been pressed.
+    ticks_pressing_shove = 0;
+    ticks_pressing_left = 0;
+    ticks_pressing_right = 0;
+
 
     col_to_x(col: integer): integer {
         // cols go from left (0) to right (7)
@@ -199,7 +213,7 @@ class SceneGrid extends Phaser.Scene {
         let rotation = (this.active_rotation + 1) % 4
         if (this.cells_active_can_move(this.active_pos_row, this.active_pos_col, rotation)) {
             this.active_rotation = rotation;
-            
+
             // Update display
             // Delete the current sprites then create new ones at correct position
             while (this.cells_active_display.length) {
@@ -243,49 +257,98 @@ class SceneGrid extends Phaser.Scene {
     }
 
     update(time: number, delta: number): void {
-        // TODO Every 2/3 sec drop the active cells one row.
-        let changed = false;
+        let ticks_and_fraction = (delta / this.tick_duration) + this.ticks_leftover;
+        let ticks_to_update: number;
+        // If not enough time has passed for a full tick, but for over half a tick, then
+        // count it as a tick, but have a negative leftover value to indicate it's ahead.
+        if (ticks_and_fraction < 1.0 && ticks_and_fraction > 0.5) {
+            ticks_to_update = 1;
+        } else {
+            ticks_to_update = Math.floor(ticks_and_fraction);
+        }
+        this.ticks_leftover = ticks_and_fraction - ticks_to_update;
 
-        if (this.cursors !== undefined) {
-            if (this.cursors.left.isDown) {
-                // If the active cells can go left, then go.
-                if (this.cells_active_can_move(this.active_pos_row, this.active_pos_col - 1, this.active_rotation)) {
-                    --this.active_pos_col;
-                    changed = true;
-                }
-            }
-            if (this.cursors.right.isDown) {
-                // If the active cells can go right, then go.
-                if (this.cells_active_can_move(this.active_pos_row, this.active_pos_col + 1, this.active_rotation)) {
-                    ++this.active_pos_col;
-                    changed = true;
-                }
-            }
-            if (this.cursors.up.isDown) {
-                // If the active cells can go up, then go.
-                if (this.cells_active_can_move(this.active_pos_row + 1, this.active_pos_col, this.active_rotation)) {
-                    ++this.active_pos_row;
-                    changed = true;
-                }
-            }
-            if (this.cursors.down.isDown) {
-                // If the active cells can go down, then go.
-                if (this.cells_active_can_move(this.active_pos_row - 1, this.active_pos_col, this.active_rotation)) {
-                    --this.active_pos_row;
-                    changed = true;
-                }
-            }
+        for (let i = 0; i < ticks_to_update; ++i) {
 
-            // Update the positions of the active cells if anything changed
-            if (changed) {
-                this.cells_active_display.forEach((sprite: Phaser.GameObjects.Sprite | null, index) => 
-                  this.cell_active_update_pos(this.active_pos_row, this.active_pos_col, this.active_rotation, index, sprite));
+            // TODO Every 2/3 sec (40 ticks) drop the active cells one row for slow,
+            // Every 1/3 sec (20 ticks) drop one for normal,
+            // Every 7/30 sec (14 ticks) drop one for fast
+            // Shoving will reset this counter.
+
+            // TODO For shifting left or right, if holding down the button,
+            // initial repeat rate 1/4 sec (15 ticks) before the second shift, and then
+            // a repeat rate of 1/10 sec (6 ticks) for every shift thereafter.
+
+            // TODO For shoving down, if holding the button, repeat rate 1/30 sec (2 ticks)
+
+            // There is no repeat rate for rotations.
+
+            let changed = false;
+
+            if (this.cursors !== undefined) {
+                if (this.cursors.left.isDown) {
+                    // If the active cells can go left, then go.
+                    if (repeaty(this.ticks_pressing_left, shift_ticks_repeat_delay, shift_ticks_repeat_rate)
+                        && this.cells_active_can_move(this.active_pos_row, this.active_pos_col - 1, this.active_rotation)) {
+                        --this.active_pos_col;
+                        changed = true;
+                    }
+                    ++this.ticks_pressing_left;
+                } else {
+                    this.ticks_pressing_left = 0;
+                }
+                if (this.cursors.right.isDown) {
+                    // If the active cells can go right, then go.
+                    if (repeaty(this.ticks_pressing_right, shift_ticks_repeat_delay, shift_ticks_repeat_rate)
+                        && this.cells_active_can_move(this.active_pos_row, this.active_pos_col + 1, this.active_rotation)) {
+                        ++this.active_pos_col;
+                        changed = true;
+                    }
+                    ++this.ticks_pressing_right;
+                } else {
+                    this.ticks_pressing_right = 0;
+                }
+                if (this.cursors.up.isDown) {
+                    // If the active cells can go up, then go.
+                    // This action is for debug purposes only.
+                    if (this.cells_active_can_move(this.active_pos_row + 1, this.active_pos_col, this.active_rotation)) {
+                        ++this.active_pos_row;
+                        changed = true;
+                    }
+                }
+                if (this.cursors.down.isDown) {
+                    // If the active cells can go down, then go.
+                    if (repeaty(this.ticks_pressing_shove, shove_ticks_repeat_delay, shove_ticks_repeat_delay)
+                        && this.cells_active_can_move(this.active_pos_row - 1, this.active_pos_col, this.active_rotation)) {
+                        --this.active_pos_row;
+                        changed = true;
+                    }
+                    ++this.ticks_pressing_shove;
+                } else {
+                    this.ticks_pressing_shove = 0;
+                }
+
+                // Update the positions of the active cells if anything changed
+                if (changed) {
+                    this.cells_active_display.forEach((sprite: Phaser.GameObjects.Sprite | null, index) =>
+                        this.cell_active_update_pos(this.active_pos_row, this.active_pos_col, this.active_rotation, index, sprite));
+                }
             }
+            ++this.ticks;
         }
         if (this.debugText != undefined) {
-            this.debugText.setText("time: " + time + "\ndelta: " + delta + "\n" + this.active_pos_row + "," + this.active_pos_col + "," + this.active_rotation);
+            this.debugText.setText("time: " + time + "\ndelta: " + delta + "\nticks: " + this.ticks + "\nticks_leftover: " + this.ticks_leftover + "\n" + this.active_pos_row + "," + this.active_pos_col + "," + this.active_rotation);
         }
     }
+}
+
+function repeaty(ticks_active: number, ticks_repeat_delay: number, ticks_repeat_rate: number): boolean {
+    return ticks_active == 0
+        || ticks_active == ticks_repeat_delay
+        || (
+            ticks_active > ticks_repeat_delay
+            && ((ticks_active - ticks_repeat_delay) % ticks_repeat_rate) == 0
+        );
 }
 
 let config = {
