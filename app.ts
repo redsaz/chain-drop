@@ -18,12 +18,13 @@ class SceneBackground extends Phaser.Scene {
     }
 }
 
-const cell_types_filter = 0b0000_1111;
+const cell_types_filter = 0b0000_0111;
 const cell_empty = 0b0000_0000;
 const cell_joined_top = 0b0001_0000;
 const cell_joined_right = 0b0010_0000;
 const cell_joined_bottom = 0b0100_0000;
 const cell_joined_left = 0b1000_0000;
+const cell_target = 0b0000_1000;
 const cell_1 = 0b0000_0001;
 const cell_2 = 0b0000_0010;
 const cell_3 = 0b0000_0011;
@@ -75,6 +76,14 @@ class SceneGrid extends Phaser.Scene {
         let y_pos = this.row_to_y(row);
         if (cell_value == 0) {
             return null;
+        } else if ((cell_value & cell_target) > 0) {
+            sprite = this.add.sprite(x_pos, y_pos, 'target');
+            this.tweens.add({
+                targets: sprite,
+                angle: 360,
+                repeat: -1,
+                duration: 1000
+            })
         } else if ((cell_value & cell_joined_right) > 0) {
             sprite = this.add.sprite(x_pos, y_pos, 'joined');
         } else if ((cell_value & cell_joined_left) > 0) {
@@ -224,6 +233,7 @@ class SceneGrid extends Phaser.Scene {
     }
 
     preload(): void {
+        this.load.image('target', 'assets/pics/target.png');
         this.load.image('joined', 'assets/pics/joined.png');
         this.load.image('filled', 'assets/pics/filled.png');
         this.cameras.main.setViewport(272, 70, 256, 512)
@@ -234,9 +244,9 @@ class SceneGrid extends Phaser.Scene {
         this.debugText = this.add.text(4, 4, 'NNN', { font: '20px Sans-Serif', color: '#000' });
 
         // Add some obstacles on the board
-        this.grid_set(0, 0, cell_1);
-        this.grid_set(8, 3, cell_2);
-        this.grid_set(15, 7, cell_3);
+        this.grid_set(0, 0, cell_1 | cell_target);
+        this.grid_set(8, 3, cell_2 | cell_target);
+        this.grid_set(15, 7, cell_3 | cell_target);
 
         // Add the active cells to board
         this.active_pos_row = 7;
@@ -244,12 +254,7 @@ class SceneGrid extends Phaser.Scene {
         this.active_rotation = 0;
         this.cells_active.push(cell_1, cell_2)
         this.cells_active.forEach((cell, index) => this.cells_active_display.push(this.cell_active_to_scene(this.active_pos_row, this.active_pos_col, this.active_rotation, index, cell)));
-        // this.grid_set(7, 3, cell_joined_right | cell_1)
-        // this.grid_set(7, 4, cell_joined_left | cell_2)
 
-        // this.cells_active.push([7, 3, cell_joined_bottom | cell_1], [6, 3, cell_joined_top | cell_3])
-        // this.grid_set(7, 3, cell_joined_bottom | cell_1)
-        // this.grid_set(6, 3, cell_joined_top | cell_3)
         if (this.input.keyboard !== null) {
             this.cursors = this.input.keyboard.createCursorKeys();
             this.cursors.space.on('down', this.received_rotate, this);
@@ -334,6 +339,7 @@ class SceneGrid extends Phaser.Scene {
                         this.cell_active_update_pos(this.active_pos_row, this.active_pos_col, this.active_rotation, index, sprite));
                 }
             }
+
             ++this.ticks;
         }
         if (this.debugText != undefined) {
