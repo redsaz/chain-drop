@@ -113,6 +113,11 @@ class SceneGrid extends Phaser.Scene {
     }
 
     cell_active_to_scene(row: integer, col: integer, rotation: integer, index: number, cell_value: integer): Phaser.GameObjects.Sprite | null {
+        let abs = this.cell_active_get_pos_absolute(row, col, rotation, index, cell_value);
+        return this.cell_to_scene(abs[0], abs[1], abs[2]);
+    }
+
+    cell_active_get_pos_absolute(row: integer, col: integer, rotation: integer, index: number, cell_value: integer): [integer, integer, integer] {
         // In 0th rotation, first cell is at the row and col, second cell is to the right.
         let join1 = 0;
         let join2 = 0;
@@ -144,7 +149,7 @@ class SceneGrid extends Phaser.Scene {
         } else {
             cell_value |= join2;
         }
-        return this.cell_to_scene(row, col, cell_value);
+        return [row, col, cell_value];
     }
 
     cell_active_update_pos(row: integer, col: integer, rotation: integer, index: number, sprite: Phaser.GameObjects.Sprite | null): void {
@@ -232,6 +237,14 @@ class SceneGrid extends Phaser.Scene {
         }
     }
 
+    // For debugging purposes only, this isn't actually part of the game.
+    received_set(): void {
+        this.cells_active.forEach((cell, index) => {
+            let abs = this.cell_active_get_pos_absolute(this.active_pos_row, this.active_pos_col, this.active_rotation, index, cell);
+            this.grid_set(abs[0], abs[1], abs[2]);
+        });
+    }
+
     preload(): void {
         this.load.image('target', 'assets/pics/target.png');
         this.load.image('joined', 'assets/pics/joined.png');
@@ -245,8 +258,8 @@ class SceneGrid extends Phaser.Scene {
 
         // Add some obstacles on the board
         this.grid_set(0, 0, cell_1 | cell_target);
-        this.grid_set(8, 3, cell_2 | cell_target);
-        this.grid_set(15, 7, cell_3 | cell_target);
+        this.grid_set(1, 3, cell_2 | cell_target);
+        this.grid_set(0, 7, cell_3 | cell_target);
 
         // Add the active cells to board
         this.active_pos_row = 7;
@@ -258,6 +271,7 @@ class SceneGrid extends Phaser.Scene {
         if (this.input.keyboard !== null) {
             this.cursors = this.input.keyboard.createCursorKeys();
             this.cursors.space.on('down', this.received_rotate, this);
+            this.cursors.shift.on('down', this.received_set, this);
         }
     }
 
