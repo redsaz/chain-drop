@@ -193,6 +193,28 @@ class SceneGrid extends Phaser.Scene {
         }
     }
 
+    // Deletes the cell at the location, and "unjoins" any cells joined to that cell.
+    grid_delete(row: number, col: number) {
+        let old = this.grid_get(row, col);
+        // If cell is connected above, remove that cell's respective join.
+        if ((old & cell_joined_top) != 0) {
+            this.grid_set(row + 1, col, this.grid_get(row + 1, col) & ~cell_joined_bottom);
+        }
+        // If cell is connected right, remove that cell's respective join.
+        if ((old & cell_joined_right) != 0) {
+            this.grid_set(row, col + 1, this.grid_get(row, col + 1) & ~cell_joined_left);
+        }
+        // If cell is connected below, remove that cell's respective join.
+        if ((old & cell_joined_bottom) != 0) {
+            this.grid_set(row - 1, col, this.grid_get(row - 1, col) & ~cell_joined_top);
+        }
+        // If cell is connected left, remove that cell's respective join.
+        if ((old & cell_joined_left) != 0) {
+            this.grid_set(row, col - 1, this.grid_get(row, col - 1) & ~cell_joined_right);
+        }
+        this.grid_set(row, col, cell_empty);
+    }
+
     constructor() {
         super({ key: 'SceneGrid', active: true });
 
@@ -321,7 +343,7 @@ class SceneGrid extends Phaser.Scene {
         });
         let series_to_clear = this.get_cells_to_clear();
         console.log("Series to clear: " + series_to_clear.length);
-        series_to_clear.forEach(series => series.forEach(cell => this.grid_set(cell[0], cell[1], cell_empty)));
+        series_to_clear.forEach(series => series.forEach(cell => this.grid_delete(...cell)));
     }
 
     preload(): void {
