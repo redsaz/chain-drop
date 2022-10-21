@@ -18,7 +18,7 @@ class SceneBackground extends Phaser.Scene {
     }
 }
 
-const cell_types_filter = 0b0000_0111;
+const cell_type_mask = 0b0000_0111;
 const cell_empty = 0b0000_0000;
 const cell_joined_top = 0b0001_0000;
 const cell_joined_right = 0b0010_0000;
@@ -101,11 +101,11 @@ class SceneGrid extends Phaser.Scene {
         }
         sprite.setScale(0.125, 0.125);
 
-        if ((cell_types_filter & cell_value) == 1) {
+        if ((cell_type_mask & cell_value) == 1) {
             sprite.setTint(0xff0000);
-        } else if ((cell_types_filter & cell_value) == 2) {
+        } else if ((cell_type_mask & cell_value) == 2) {
             sprite.setTint(0x00ff00);
-        } else if ((cell_types_filter & cell_value) == 3) {
+        } else if ((cell_type_mask & cell_value) == 3) {
             sprite.setTint(0x4466ff);
         }
 
@@ -143,7 +143,7 @@ class SceneGrid extends Phaser.Scene {
         }
 
         // Use the correct join depending on which active cell we're looking at
-        cell_value &= cell_types_filter;
+        cell_value &= cell_type_mask;
         if (index == 0) {
             cell_value |= join1;
         } else {
@@ -173,6 +173,11 @@ class SceneGrid extends Phaser.Scene {
             row += 1 - index;
         }
         sprite.setPosition(this.col_to_x(col), this.row_to_y(row));
+    }
+
+    grid_get(row: number, col: number): integer {
+        let index = row * this.grid_cols + col;
+        return this.grid[index];
     }
 
     grid_set(row: number, col: number, cell_value: integer) {
@@ -222,6 +227,77 @@ class SceneGrid extends Phaser.Scene {
         // return this.cells_active.every((cell, index) => this.grid[(pos_row * this.grid_cols) + (pos_col + index)] == cell_empty);
     }
 
+    // Returns sets of cells to clear from the board (but doesn't clear them itself).
+    get_cells_to_clear(): [integer, integer][][] {
+        let sets_to_clear: [integer, integer][][] = [];
+        // Find any horizontal clears
+        for (let row = 0; row < this.grid_rows; ++row) {
+            let series_type = 0;
+            let series_length = 0;
+            for (let col = 0; col < this.grid_cols; ++col) {
+                let curr_type = this.grid_get(row, col) & cell_type_mask;
+                if (curr_type == series_type) {
+                    ++series_length;
+                } else {
+                    // If series is long enough, add cols to clear
+                    if (series_type != 0 && series_length >= 4) {
+                        let cells_to_clear: [integer, integer][] = [];
+                        for (let i = col - series_length; i < col; ++i) {
+                            cells_to_clear.push([row, i]);
+                        }
+                        sets_to_clear.push(cells_to_clear);
+                    }
+
+                    series_type = curr_type;
+                    series_length = 1;
+                }
+            }
+            // Must check at end of each row if there is a series long enough to clear.
+            // If series is long enough, add cols to clear
+            if (series_type != 0 && series_length >= 4) {
+                let cells_to_clear: [integer, integer][] = [];
+                for (let i = this.grid_cols - series_length; i < this.grid_cols; ++i) {
+                    cells_to_clear.push([row, i]);
+                }
+                sets_to_clear.push(cells_to_clear);
+            }
+        }
+
+        // Find any vertical clears
+        for (let col = 0; col < this.grid_cols; ++col) {
+            let series_type = 0;
+            let series_length = 0;
+            for (let row = 0; row < this.grid_rows; ++row) {
+                let curr_type = this.grid_get(row, col) & cell_type_mask;
+                if (curr_type == series_type) {
+                    ++series_length;
+                } else {
+                    // If series is long enough, add rows to clear
+                    if (series_type != 0 && series_length >= 4) {
+                        let cells_to_clear: [integer, integer][] = [];
+                        for (let i = row - series_length; i < row; ++i) {
+                            cells_to_clear.push([i, col]);
+                        }
+                        sets_to_clear.push(cells_to_clear);
+                    }
+
+                    series_type = curr_type;
+                    series_length = 1;
+                }
+            }
+            // Must check at end of each col if there is a series long enough to clear.
+            // If series is long enough, add rows to clear
+            if (series_type != 0 && series_length >= 4) {
+                let cells_to_clear: [integer, integer][] = [];
+                for (let i = this.grid_rows - series_length; i < this.grid_rows; ++i) {
+                    cells_to_clear.push([i, col]);
+                }
+                sets_to_clear.push(cells_to_clear);
+            }
+        }
+        return sets_to_clear;
+    }
+
     received_rotate(): void {
         // If the active cells can rotate, then go
         let rotation = (this.active_rotation + 1) % 4
@@ -243,6 +319,9 @@ class SceneGrid extends Phaser.Scene {
             let abs = this.cell_active_get_pos_absolute(this.active_pos_row, this.active_pos_col, this.active_rotation, index, cell);
             this.grid_set(abs[0], abs[1], abs[2]);
         });
+        let series_to_clear = this.get_cells_to_clear();
+        console.log("Series to clear: " + series_to_clear.length);
+        series_to_clear.forEach(series => series.forEach(cell => this.grid_set(cell[0], cell[1], cell_empty)));
     }
 
     preload(): void {
