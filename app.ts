@@ -44,10 +44,14 @@ class SceneGrid extends Phaser.Scene {
     grid_rows = 16;
     grid_cols = 8;
     grid: integer[] = Array(this.grid_rows * this.grid_cols);
+    start_row = 15;
+    start_col = 3;
     active_pos_row = 0;
     active_pos_col = 0;
     active_rotation = 0;
     cells_active: integer[] = Array();
+    drop_counter = 0;
+    drop_rate = 40;
 
     grid_display: (Phaser.GameObjects.Sprite | null)[] = Array(this.grid_rows * this.grid_cols);
     cells_active_display: (Phaser.GameObjects.Sprite | null)[] = Array();
@@ -249,6 +253,26 @@ class SceneGrid extends Phaser.Scene {
         // return this.cells_active.every((cell, index) => this.grid[(pos_row * this.grid_cols) + (pos_col + index)] == cell_empty);
     }
 
+    active_set() {
+        this.cells_active.forEach((cell, index) => {
+            let abs = this.cell_active_get_pos_absolute(this.active_pos_row, this.active_pos_col, this.active_rotation, index, cell);
+            this.grid_set(abs[0], abs[1], abs[2]);
+        });
+        let series_to_clear = this.get_cells_to_clear();
+        console.log("Series to clear: " + series_to_clear.length);
+        series_to_clear.forEach(series => series.forEach(cell => this.grid_delete(...cell)));
+
+        this.active_pos_row = this.start_row;
+        this.active_pos_col = this.start_col;
+        this.active_rotation = 0;
+        // Update display
+        // Delete the current sprites then create new ones at correct position
+        while (this.cells_active_display.length) {
+            this.cells_active_display.shift()?.destroy();
+        }
+        this.cells_active.forEach((cell, index) => this.cells_active_display.push(this.cell_active_to_scene(this.active_pos_row, this.active_pos_col, this.active_rotation, index, cell)));
+    }
+
     // Returns sets of cells to clear from the board (but doesn't clear them itself).
     get_cells_to_clear(): [integer, integer][][] {
         let sets_to_clear: [integer, integer][][] = [];
@@ -337,13 +361,7 @@ class SceneGrid extends Phaser.Scene {
 
     // For debugging purposes only, this isn't actually part of the game.
     received_set(): void {
-        this.cells_active.forEach((cell, index) => {
-            let abs = this.cell_active_get_pos_absolute(this.active_pos_row, this.active_pos_col, this.active_rotation, index, cell);
-            this.grid_set(abs[0], abs[1], abs[2]);
-        });
-        let series_to_clear = this.get_cells_to_clear();
-        console.log("Series to clear: " + series_to_clear.length);
-        series_to_clear.forEach(series => series.forEach(cell => this.grid_delete(...cell)));
+        this.active_set();
     }
 
     preload(): void {
@@ -363,8 +381,8 @@ class SceneGrid extends Phaser.Scene {
         this.grid_set(0, 7, cell_3 | cell_target);
 
         // Add the active cells to board
-        this.active_pos_row = 7;
-        this.active_pos_col = 3;
+        this.active_pos_row = this.start_row;
+        this.active_pos_col = this.start_col;
         this.active_rotation = 0;
         this.cells_active.push(cell_1, cell_2)
         this.cells_active.forEach((cell, index) => this.cells_active_display.push(this.cell_active_to_scene(this.active_pos_row, this.active_pos_col, this.active_rotation, index, cell)));
@@ -390,18 +408,7 @@ class SceneGrid extends Phaser.Scene {
 
         for (let i = 0; i < ticks_to_update; ++i) {
 
-            // TODO Every 2/3 sec (40 ticks) drop the active cells one row for slow,
-            // Every 1/3 sec (20 ticks) drop one for normal,
-            // Every 7/30 sec (14 ticks) drop one for fast
-            // Shoving will reset this counter.
-
-            // TODO For shifting left or right, if holding down the button,
-            // initial repeat rate 1/4 sec (15 ticks) before the second shift, and then
-            // a repeat rate of 1/10 sec (6 ticks) for every shift thereafter.
-
-            // TODO For shoving down, if holding the button, repeat rate 1/30 sec (2 ticks)
-
-            // There is no repeat rate for rotations.
+            ++this.drop_counter;
 
             let changed = false;
 
@@ -438,21 +445,35 @@ class SceneGrid extends Phaser.Scene {
                 }
                 if (this.cursors.down.isDown) {
                     // If the active cells can go down, then go.
-                    if (repeaty(this.ticks_pressing_shove, shove_ticks_repeat_delay, shove_ticks_repeat_delay)
-                        && this.cells_active_can_move(this.active_pos_row - 1, this.active_pos_col, this.active_rotation)) {
-                        --this.active_pos_row;
-                        changed = true;
+                    if (repeaty(this.ticks_pressing_shove, shove_ticks_repeat_delay, shove_ticks_repeat_delay)) {
+                        if (this.cells_active_can_move(this.active_pos_row - 1, this.active_pos_col, this.active_rotation)) {
+                            --this.active_pos_row;
+                            changed = true;
+                            this.drop_counter = 0;
+                        } else {
+                            this.active_set();
+                        }
                     }
                     ++this.ticks_pressing_shove;
                 } else {
                     this.ticks_pressing_shove = 0;
                 }
+            }
 
-                // Update the positions of the active cells if anything changed
-                if (changed) {
-                    this.cells_active_display.forEach((sprite: Phaser.GameObjects.Sprite | null, index) =>
-                        this.cell_active_update_pos(this.active_pos_row, this.active_pos_col, this.active_rotation, index, sprite));
+            if (this.drop_counter >= this.drop_rate) {
+                this.drop_counter = 0;
+                if (this.cells_active_can_move(this.active_pos_row - 1, this.active_pos_col, this.active_rotation)) {
+                    --this.active_pos_row;
+                } else {
+                    this.active_set();
                 }
+                changed = true;
+            }
+
+            // Update the positions of the active cells if anything changed
+            if (changed) {
+                this.cells_active_display.forEach((sprite: Phaser.GameObjects.Sprite | null, index) =>
+                    this.cell_active_update_pos(this.active_pos_row, this.active_pos_col, this.active_rotation, index, sprite));
             }
 
             ++this.ticks;
