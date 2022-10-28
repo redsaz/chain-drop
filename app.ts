@@ -33,6 +33,13 @@ const shift_ticks_repeat_delay = 15;
 const shift_ticks_repeat_rate = 6;
 const shove_ticks_repeat_delay = 2;
 
+const game_state_pregame = 1; // Game hasn't started yet (counting down, whatever)
+const game_state_releasing = 2; // The active cells are preparing into the grid
+const game_state_active = 3; // The player can control the active cells
+const game_state_settle = 4; // The active cells are setting into the grid.
+const game_state_done_lost = 5; // The game is finished, the player lost.
+const game_state_done_won = 6; // The game is finished, the player won.
+
 class SceneGrid extends Phaser.Scene {
     cursors: Phaser.Types.Input.Keyboard.CursorKeys | undefined;
     debugText: Phaser.GameObjects.Text | undefined;
@@ -41,6 +48,7 @@ class SceneGrid extends Phaser.Scene {
     ticks: number = 0;
     ticks_leftover: number = 0; // sometimes a little extra or a little less delta is between updates.
 
+    game_state = game_state_pregame;
     grid_rows = 16;
     grid_cols = 8;
     grid: integer[] = Array(this.grid_rows * this.grid_cols);
@@ -52,6 +60,8 @@ class SceneGrid extends Phaser.Scene {
     cells_active: integer[] = Array();
     drop_counter = 0;
     drop_rate = 40;
+    release_counter = 0;
+    settle_counter = 0;
 
     grid_display: (Phaser.GameObjects.Sprite | null)[] = Array(this.grid_rows * this.grid_cols);
     cells_active_display: (Phaser.GameObjects.Sprite | null)[] = Array();
@@ -176,7 +186,7 @@ class SceneGrid extends Phaser.Scene {
             // In 3rd rotation, first cell is above, second cell is at row and col.
             row += 1 - index;
         }
-        sprite.setPosition(this.col_to_x(col), this.row_to_y(row));
+        sprite.setPosition(this.col_to_x(col), this.row_to_y(row) + 4);
     }
 
     grid_get(row: number, col: number): integer {
@@ -258,20 +268,19 @@ class SceneGrid extends Phaser.Scene {
             let abs = this.cell_active_get_pos_absolute(this.active_pos_row, this.active_pos_col, this.active_rotation, index, cell);
             this.grid_set(abs[0], abs[1], abs[2]);
         });
+
+        // TODO: This should not be instant.
         let series_to_clear = this.get_cells_to_clear();
         console.log("Series to clear: " + series_to_clear.length);
         series_to_clear.forEach(series => series.forEach(cell => this.grid_delete(...cell)));
 
-        this.active_pos_row = this.start_row;
-        this.active_pos_col = this.start_col;
-        this.active_rotation = 0;
-        // Update display
-        // Delete the current sprites then create new ones at correct position
+        // Delete the active sprites
         while (this.cells_active_display.length) {
             this.cells_active_display.shift()?.destroy();
         }
-        this.cells_active.forEach((cell, index) => this.cells_active_display.push(this.cell_active_to_scene(this.active_pos_row, this.active_pos_col, this.active_rotation, index, cell)));
     }
+
+
 
     // Returns sets of cells to clear from the board (but doesn't clear them itself).
     get_cells_to_clear(): [integer, integer][][] {
@@ -380,12 +389,11 @@ class SceneGrid extends Phaser.Scene {
         this.grid_set(1, 3, cell_2 | cell_target);
         this.grid_set(0, 7, cell_3 | cell_target);
 
-        // Add the active cells to board
+        // Init the active cells
         this.active_pos_row = this.start_row;
         this.active_pos_col = this.start_col;
         this.active_rotation = 0;
         this.cells_active.push(cell_1, cell_2)
-        this.cells_active.forEach((cell, index) => this.cells_active_display.push(this.cell_active_to_scene(this.active_pos_row, this.active_pos_col, this.active_rotation, index, cell)));
 
         if (this.input.keyboard !== null) {
             this.cursors = this.input.keyboard.createCursorKeys();
@@ -407,82 +415,159 @@ class SceneGrid extends Phaser.Scene {
         this.ticks_leftover = ticks_and_fraction - ticks_to_update;
 
         for (let i = 0; i < ticks_to_update; ++i) {
-
-            ++this.drop_counter;
-
-            let changed = false;
-
-            if (this.cursors !== undefined) {
-                if (this.cursors.left.isDown) {
-                    // If the active cells can go left, then go.
-                    if (repeaty(this.ticks_pressing_left, shift_ticks_repeat_delay, shift_ticks_repeat_rate)
-                        && this.cells_active_can_move(this.active_pos_row, this.active_pos_col - 1, this.active_rotation)) {
-                        --this.active_pos_col;
-                        changed = true;
-                    }
-                    ++this.ticks_pressing_left;
-                } else {
-                    this.ticks_pressing_left = 0;
+            switch (this.game_state) {
+                case game_state_pregame: {
+                    // This is normally used to set up the board, but it kinda already is,
+                    // so we do nothing but start the game... for now.
+                    this.game_state = game_state_releasing;
+                    break;
                 }
-                if (this.cursors.right.isDown) {
-                    // If the active cells can go right, then go.
-                    if (repeaty(this.ticks_pressing_right, shift_ticks_repeat_delay, shift_ticks_repeat_rate)
-                        && this.cells_active_can_move(this.active_pos_row, this.active_pos_col + 1, this.active_rotation)) {
-                        ++this.active_pos_col;
-                        changed = true;
+                case game_state_releasing: {
+                    if (this.release_counter < 45) {
+                        ++this.release_counter;
+                    } else {
+                        this.release_counter = 0;
+
+                        // position and display the active cells
+                        this.active_pos_row = this.start_row;
+                        this.active_pos_col = this.start_col;
+                        this.active_rotation = 0;
+                        this.cells_active.forEach((cell, index) => this.cells_active_display.push(this.cell_active_to_scene(this.active_pos_row, this.active_pos_col, this.active_rotation, index, cell)));
+
+                        this.game_state = game_state_active;
                     }
-                    ++this.ticks_pressing_right;
-                } else {
-                    this.ticks_pressing_right = 0;
+                    break;
                 }
-                if (this.cursors.up.isDown) {
-                    // If the active cells can go up, then go.
-                    // This action is for debug purposes only.
-                    if (this.cells_active_can_move(this.active_pos_row + 1, this.active_pos_col, this.active_rotation)) {
-                        ++this.active_pos_row;
-                        changed = true;
-                    }
+                case game_state_active: {
+                    this.active_state_update();
+                    break;
                 }
-                if (this.cursors.down.isDown) {
-                    // If the active cells can go down, then go.
-                    if (repeaty(this.ticks_pressing_shove, shove_ticks_repeat_delay, shove_ticks_repeat_delay)) {
-                        if (this.cells_active_can_move(this.active_pos_row - 1, this.active_pos_col, this.active_rotation)) {
-                            --this.active_pos_row;
-                            changed = true;
-                            this.drop_counter = 0;
-                        } else {
-                            this.active_set();
-                        }
+                case game_state_settle: {
+                    if (this.settle_counter < 15) {
+                        ++this.settle_counter;
+                    } else {
+                        this.settle_counter = 0;
+                        this.game_state = game_state_releasing;
                     }
-                    ++this.ticks_pressing_shove;
-                } else {
-                    this.ticks_pressing_shove = 0;
+                    break;
+                }
+                case game_state_done_lost: {
+                    break;
+                }
+                case game_state_done_won: {
+                    break;
                 }
             }
-
-            if (this.drop_counter >= this.drop_rate) {
-                this.drop_counter = 0;
-                if (this.cells_active_can_move(this.active_pos_row - 1, this.active_pos_col, this.active_rotation)) {
-                    --this.active_pos_row;
-                } else {
-                    this.active_set();
-                }
-                changed = true;
-            }
-
-            // Update the positions of the active cells if anything changed
-            if (changed) {
-                this.cells_active_display.forEach((sprite: Phaser.GameObjects.Sprite | null, index) =>
-                    this.cell_active_update_pos(this.active_pos_row, this.active_pos_col, this.active_rotation, index, sprite));
-            }
-
             ++this.ticks;
         }
+
         if (this.debugText != undefined) {
-            this.debugText.setText("time: " + time + "\ndelta: " + delta + "\nticks: " + this.ticks + "\nticks_leftover: " + this.ticks_leftover + "\n" + this.active_pos_row + "," + this.active_pos_col + "," + this.active_rotation);
+            let state_text = "unknown";
+            switch (this.game_state) {
+                case game_state_pregame: {
+                    state_text = "pregame";
+                    break;
+                }
+                case game_state_releasing: {
+                    state_text = "releasing";
+                    break;
+                }
+                case game_state_active: {
+                    state_text = "active";
+                    break;
+                }
+                case game_state_settle: {
+                    state_text = "settle";
+                    break;
+                }
+                case game_state_done_lost: {
+                    state_text = "game over";
+                    break;
+                }
+                case game_state_done_won: {
+                    state_text = "win";
+                    break;
+                }
+            }
+
+            this.debugText.setText("time: " + time + "\ndelta: " + delta + "\nticks: " + this.ticks + "\nticks_leftover: " + this.ticks_leftover + "\n" + this.active_pos_row + "," + this.active_pos_col + "," + this.active_rotation + "\n" + this.game_state + ": " + state_text);
+        }
+    }
+
+    active_state_update(): void {
+
+        ++this.drop_counter;
+
+        let changed = false;
+
+        if (this.cursors !== undefined) {
+            if (this.cursors.left.isDown) {
+                // If the active cells can go left, then go.
+                if (repeaty(this.ticks_pressing_left, shift_ticks_repeat_delay, shift_ticks_repeat_rate)
+                    && this.cells_active_can_move(this.active_pos_row, this.active_pos_col - 1, this.active_rotation)) {
+                    --this.active_pos_col;
+                    changed = true;
+                }
+                ++this.ticks_pressing_left;
+            } else {
+                this.ticks_pressing_left = 0;
+            }
+            if (this.cursors.right.isDown) {
+                // If the active cells can go right, then go.
+                if (repeaty(this.ticks_pressing_right, shift_ticks_repeat_delay, shift_ticks_repeat_rate)
+                    && this.cells_active_can_move(this.active_pos_row, this.active_pos_col + 1, this.active_rotation)) {
+                    ++this.active_pos_col;
+                    changed = true;
+                }
+                ++this.ticks_pressing_right;
+            } else {
+                this.ticks_pressing_right = 0;
+            }
+            if (this.cursors.up.isDown) {
+                // If the active cells can go up, then go.
+                // This action is for debug purposes only.
+                if (this.cells_active_can_move(this.active_pos_row + 1, this.active_pos_col, this.active_rotation)) {
+                    ++this.active_pos_row;
+                    changed = true;
+                }
+            }
+            if (this.cursors.down.isDown) {
+                // If the active cells can go down, then go.
+                if (repeaty(this.ticks_pressing_shove, shove_ticks_repeat_delay, shove_ticks_repeat_delay)) {
+                    if (this.cells_active_can_move(this.active_pos_row - 1, this.active_pos_col, this.active_rotation)) {
+                        --this.active_pos_row;
+                        changed = true;
+                        this.drop_counter = 0;
+                    } else {
+                        this.active_set();
+                        this.game_state = game_state_settle;
+                    }
+                }
+                ++this.ticks_pressing_shove;
+            } else {
+                this.ticks_pressing_shove = 0;
+            }
+        }
+
+        if (this.drop_counter >= this.drop_rate) {
+            this.drop_counter = 0;
+            if (this.cells_active_can_move(this.active_pos_row - 1, this.active_pos_col, this.active_rotation)) {
+                --this.active_pos_row;
+            } else {
+                this.active_set();
+                this.game_state = game_state_settle;
+            }
+            changed = true;
+        }
+
+        // Update the positions of the active cells if anything changed
+        if (changed) {
+            this.cells_active_display.forEach((sprite: Phaser.GameObjects.Sprite | null, index) =>
+                this.cell_active_update_pos(this.active_pos_row, this.active_pos_col, this.active_rotation, index, sprite));
         }
     }
 }
+
 
 function repeaty(ticks_active: number, ticks_repeat_delay: number, ticks_repeat_rate: number): boolean {
     return ticks_active == 0
