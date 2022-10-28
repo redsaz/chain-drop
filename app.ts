@@ -370,7 +370,7 @@ class SceneGrid extends Phaser.Scene {
 
     // For debugging purposes only, this isn't actually part of the game.
     received_set(): void {
-        this.active_set();
+        this.game_state = game_state_settle;
     }
 
     preload(): void {
@@ -443,6 +443,9 @@ class SceneGrid extends Phaser.Scene {
                     break;
                 }
                 case game_state_settle: {
+                    if (this.settle_counter == 0) {
+                        this.active_set();
+                    }
                     if (this.settle_counter < 15) {
                         ++this.settle_counter;
                     } else {
@@ -539,7 +542,6 @@ class SceneGrid extends Phaser.Scene {
                         changed = true;
                         this.drop_counter = 0;
                     } else {
-                        this.active_set();
                         this.game_state = game_state_settle;
                     }
                 }
@@ -554,7 +556,6 @@ class SceneGrid extends Phaser.Scene {
             if (this.cells_active_can_move(this.active_pos_row - 1, this.active_pos_col, this.active_rotation)) {
                 --this.active_pos_row;
             } else {
-                this.active_set();
                 this.game_state = game_state_settle;
             }
             changed = true;
