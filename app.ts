@@ -18,16 +18,17 @@ class SceneBackground extends Phaser.Scene {
     }
 }
 
-const cell_type_mask = 0b0000_0111;
-const cell_empty = 0b0000_0000;
-const cell_joined_top = 0b0001_0000;
-const cell_joined_right = 0b0010_0000;
-const cell_joined_bottom = 0b0100_0000;
-const cell_joined_left = 0b1000_0000;
-const cell_target = 0b0000_1000;
-const cell_1 = 0b0000_0001;
-const cell_2 = 0b0000_0010;
-const cell_3 = 0b0000_0011;
+const cell_type_mask = 0b0000_0000_0111;
+const cell_empty = 0b0000_0000_0000;
+const cell_joined_top = 0b0000_0001_0000;
+const cell_joined_right = 0b0000_0010_0000;
+const cell_joined_bottom = 0b0000_0100_0000;
+const cell_joined_left = 0b0000_1000_0000;
+const cell_target = 0b0000_0000_1000;
+const cell_settled = 0b0001_0000_0000;
+const cell_1 = 0b0000_0000_0001;
+const cell_2 = 0b0000_0000_0010;
+const cell_3 = 0b0000_0000_0011;
 
 const shift_ticks_repeat_delay = 15;
 const shift_ticks_repeat_rate = 6;
@@ -36,9 +37,10 @@ const shove_ticks_repeat_delay = 2;
 const game_state_pregame = 1; // Game hasn't started yet (counting down, whatever)
 const game_state_releasing = 2; // The active cells are preparing into the grid
 const game_state_active = 3; // The player can control the active cells
-const game_state_settle = 4; // The active cells are setting into the grid.
-const game_state_done_lost = 5; // The game is finished, the player lost.
-const game_state_done_won = 6; // The game is finished, the player won.
+const game_state_set = 4; // The active cells need to be set and possibly cleared.
+const game_state_settle = 5; // The active cells have been set, and possibly gravity needs to affect the board.
+const game_state_done_lost = 6; // The game is finished, the player lost.
+const game_state_done_won = 7; // The game is finished, the player won.
 
 class SceneGrid extends Phaser.Scene {
     cursors: Phaser.Types.Input.Keyboard.CursorKeys | undefined;
@@ -115,12 +117,19 @@ class SceneGrid extends Phaser.Scene {
         }
         sprite.setScale(0.125, 0.125);
 
+        let color = 0xffffff;
         if ((cell_type_mask & cell_value) == 1) {
-            sprite.setTint(0xff0000);
+            color = 0xff0000;
         } else if ((cell_type_mask & cell_value) == 2) {
-            sprite.setTint(0x00ff00);
+            color = 0x00ff00;
         } else if ((cell_type_mask & cell_value) == 3) {
-            sprite.setTint(0x4466ff);
+            color = 0x4466ff;
+        }
+
+        if ((cell_value & cell_settled) != 0) {
+            sprite.setTint(color, color, color, 0);
+        } else {
+            sprite.setTint(color);
         }
 
         return sprite;
@@ -269,20 +278,21 @@ class SceneGrid extends Phaser.Scene {
             this.grid_set(abs[0], abs[1], abs[2]);
         });
 
-        // TODO: This should not be instant.
-        let series_to_clear = this.get_cells_to_clear();
-        console.log("Series to clear: " + series_to_clear.length);
-        series_to_clear.forEach(series => series.forEach(cell => this.grid_delete(...cell)));
-
         // Delete the active sprites
         while (this.cells_active_display.length) {
             this.cells_active_display.shift()?.destroy();
         }
+
+        this.calc_settled_cells();
+
+        // TODO: This should not be instant.
+        let series_to_clear = this.get_cells_to_clear();
+        console.log("Series to clear: " + series_to_clear.length);
+        series_to_clear.forEach(series => series.forEach(cell => this.grid_delete(...cell)));
     }
 
-
-
     // Returns sets of cells to clear from the board (but doesn't clear them itself).
+    // Only settled cells are considered for clearing.
     get_cells_to_clear(): [integer, integer][][] {
         let sets_to_clear: [integer, integer][][] = [];
         // Find any horizontal clears
@@ -290,8 +300,9 @@ class SceneGrid extends Phaser.Scene {
             let series_type = 0;
             let series_length = 0;
             for (let col = 0; col < this.grid_cols; ++col) {
-                let curr_type = this.grid_get(row, col) & cell_type_mask;
-                if (curr_type == series_type) {
+                let cell = this.grid_get(row, col);
+                let curr_type = cell & cell_type_mask;
+                if (curr_type == series_type && (cell & cell_settled) != 0) {
                     ++series_length;
                 } else {
                     // If series is long enough, add cols to clear
@@ -323,8 +334,9 @@ class SceneGrid extends Phaser.Scene {
             let series_type = 0;
             let series_length = 0;
             for (let row = 0; row < this.grid_rows; ++row) {
-                let curr_type = this.grid_get(row, col) & cell_type_mask;
-                if (curr_type == series_type) {
+                let cell = this.grid_get(row, col);
+                let curr_type = cell & cell_type_mask;
+                if (curr_type == series_type && (cell & cell_settled) != 0) {
                     ++series_length;
                 } else {
                     // If series is long enough, add rows to clear
@@ -370,7 +382,112 @@ class SceneGrid extends Phaser.Scene {
 
     // For debugging purposes only, this isn't actually part of the game.
     received_set(): void {
-        this.game_state = game_state_settle;
+        this.game_state = game_state_set;
+    }
+
+    // Determine the cells which are "settled", which should not drop because they
+    // are resting on cells that should not move. The other cells should allow to drop due to gravity.
+    calc_settled_cells(): void {
+        // Work from the bottom up.
+        // Target cells are always settled.
+        // Any cells resting at the bottom of the grid are settled.
+        // Any cells resting immediately on top of settled cells are settled.
+        // Any cells joined to settled cells are also settled.
+        // When following joins, if the cell is already settled, assume it has already been visited.
+        // Any remaining cells are not settled, and can be affected by gravity.
+
+        // First, clear all cells' "settled" flag;
+        for (let i = 0; i < this.grid.length; ++i) {
+            this.grid[i] &= ~cell_settled;
+        }
+
+        for (let row = 0; row < this.grid_rows; ++row) {
+            for (let col = 0; col < this.grid_cols; ++col) {
+                let cell = this.grid_get(row, col);
+                // Skip any already settled cells or empty cells.
+                if (cell == cell_empty || ((cell & cell_settled) != 0)) {
+                    continue;
+                }
+                // If on bottom row, cell is automatically settled.
+                if (row == 0) {
+                    cell |= cell_settled;
+                } else if ((cell & cell_target) != 0) {
+                    // If cell is a target, it is always settled.
+                    cell |= cell_settled;
+                } else if ((this.grid_get(row - 1, col) & cell_settled) != 0) {
+                    // If the cell below is settled, then this cell is settled.
+                    cell |= cell_settled;
+                }
+
+                // Update the cell value into the grid.
+                this.grid_set(row, col, cell);
+
+                // If the cell was joined to any other cells, then those cells must be settled too.
+                // (Note: this is simplified to only work when two cells are joined. It fails
+                // if a cell has more than one join, or if there is a chain of 3 or more cells.)
+                // (To have this work for multijoined cells or 3+ chained cells, we need to switch
+                // from if-elseif to if-if and also look at joined bottom and loop.
+                if ((cell & cell_settled) != 0 && (cell & cell_joined_top) != 0) {
+                    let joined = this.grid_get(row + 1, col) | cell_settled;
+                    this.grid_set(row + 1, col, joined);
+                } else if ((cell & cell_settled) != 0 && (cell & cell_joined_right) != 0) {
+                    let joined = this.grid_get(row, col + 1) | cell_settled;
+                    this.grid_set(row, col + 1, joined);
+                } else if ((cell & cell_settled) != 0 && (cell & cell_joined_left) != 0) {
+                    let joined = this.grid_get(row, col - 1) | cell_settled;
+                    this.grid_set(row, col - 1, joined);
+                }
+            }
+        }
+    }
+
+    // Drop (by one) all cells that are not settled.
+    drop_dangling_cells(): boolean {
+        let settled = false; // if at least one cell settled, then check if cells need cleared.
+        let dropped = false; // if at least one cell dropped by gravity, the function will need to run again.
+        // Work from the bottom up (well, not the bottom-most row though)
+        for (let row = 1; row < this.grid_rows; ++row) {
+            for (let col = 0; col < this.grid_cols; ++col) {
+                let cell = this.grid_get(row, col);
+                // If the cell is empty or settled, do nothing.
+                if (cell == cell_empty || (cell & cell_settled) != 0) {
+                    continue;
+                }
+
+                // If the cell below is occupied then this cell should not drop, and it and any
+                // joined cell should be settled.
+                if (this.grid_get(row - 1, col) != cell_empty) {
+                    settled = true;
+                    this.grid_set(row, col, cell | cell_settled);
+
+                    // See note in calc_settled_cells for why we only do these two checks.
+                    if ((cell & cell_joined_top) != 0) {
+                        let joined = this.grid_get(row + 1, col) | cell_settled;
+                        this.grid_set(row + 1, col, joined);
+                    } else if ((cell & cell_joined_right) != 0) {
+                        let joined = this.grid_get(row, col + 1) | cell_settled;
+                        this.grid_set(row, col + 1, joined);
+                    } else if ((cell & cell_joined_left) != 0) {
+                        let joined = this.grid_get(row, col - 1) | cell_settled;
+                        this.grid_set(row, col - 1, joined);
+                    }
+                }
+
+                this.grid_set(row - 1, col, cell);
+                this.grid_set(row, col, cell_empty);
+                dropped = true;
+            }
+        }
+
+        if (settled) {
+            this.calc_settled_cells();
+
+            // TODO: This should not be instant.
+            let series_to_clear = this.get_cells_to_clear();
+            series_to_clear.forEach(series => series.forEach(cell => this.grid_delete(...cell)));
+            this.calc_settled_cells();
+        }
+        return dropped;
     }
 
     preload(): void {
@@ -387,7 +504,7 @@ class SceneGrid extends Phaser.Scene {
         // Add some obstacles on the board
         this.grid_set(0, 0, cell_1 | cell_target);
         this.grid_set(1, 3, cell_2 | cell_target);
-        this.grid_set(0, 7, cell_3 | cell_target);
+        this.grid_set(5, 7, cell_3 | cell_target);
 
         // Init the active cells
         this.active_pos_row = this.start_row;
@@ -442,13 +559,16 @@ class SceneGrid extends Phaser.Scene {
                     this.active_state_update();
                     break;
                 }
+                case game_state_set: {
+                    this.active_set();
+                    this.game_state = game_state_settle;
+                    break;
+                }
                 case game_state_settle: {
-                    if (this.settle_counter == 0) {
-                        this.active_set();
-                    }
+                    this.calc_settled_cells();
                     if (this.settle_counter < 15) {
                         ++this.settle_counter;
-                    } else {
+                    } else if (!this.drop_dangling_cells()) {
                         this.settle_counter = 0;
                         this.game_state = game_state_releasing;
                     }
@@ -477,6 +597,10 @@ class SceneGrid extends Phaser.Scene {
                 }
                 case game_state_active: {
                     state_text = "active";
+                    break;
+                }
+                case game_state_set: {
+                    state_text = "set";
                     break;
                 }
                 case game_state_settle: {
@@ -542,7 +666,7 @@ class SceneGrid extends Phaser.Scene {
                         changed = true;
                         this.drop_counter = 0;
                     } else {
-                        this.game_state = game_state_settle;
+                        this.game_state = game_state_set;
                     }
                 }
                 ++this.ticks_pressing_shove;
@@ -556,7 +680,8 @@ class SceneGrid extends Phaser.Scene {
             if (this.cells_active_can_move(this.active_pos_row - 1, this.active_pos_col, this.active_rotation)) {
                 --this.active_pos_row;
             } else {
-                this.game_state = game_state_settle;
+                this.active_set();
+                this.game_state = game_state_set;
             }
             changed = true;
         }
