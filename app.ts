@@ -36,10 +36,9 @@ const shove_ticks_repeat_delay = 2;
 const game_state_pregame = 1; // Game hasn't started yet (counting down, whatever)
 const game_state_releasing = 2; // The active cells are preparing into the grid
 const game_state_active = 3; // The player can control the active cells
-const game_state_set = 4; // The active cells need to be set and possibly cleared.
-const game_state_settle = 5; // The active cells have been set, and possibly gravity needs to affect the board.
-const game_state_done_lost = 6; // The game is finished, the player lost.
-const game_state_done_won = 7; // The game is finished, the player won.
+const game_state_settle = 4; // The active cells have been set, and possibly cleared and gravity needs to affect the board.
+const game_state_done_lost = 5; // The game is finished, the player lost.
+const game_state_done_won = 6; // The game is finished, the player won.
 
 class SceneGrid extends Phaser.Scene {
     cursors: Phaser.Types.Input.Keyboard.CursorKeys | undefined;
@@ -374,7 +373,8 @@ class SceneGrid extends Phaser.Scene {
 
     // For debugging purposes only, this isn't actually part of the game.
     received_set(): void {
-        this.game_state = game_state_set;
+        this.active_set();
+        this.game_state = game_state_settle;
     }
 
     // Drop (by one) all cells that are not settled.
@@ -484,11 +484,6 @@ class SceneGrid extends Phaser.Scene {
                     this.active_state_update();
                     break;
                 }
-                case game_state_set: {
-                    this.active_set();
-                    this.game_state = game_state_settle;
-                    break;
-                }
                 case game_state_settle: {
                     if (this.settle_counter < 15) {
                         ++this.settle_counter;
@@ -529,10 +524,6 @@ class SceneGrid extends Phaser.Scene {
                     state_text = "active";
                     break;
                 }
-                case game_state_set: {
-                    state_text = "set";
-                    break;
-                }
                 case game_state_settle: {
                     state_text = "settle";
                     break;
@@ -556,6 +547,7 @@ class SceneGrid extends Phaser.Scene {
         ++this.drop_counter;
 
         let changed = false;
+        let should_settle = false;
 
         if (this.cursors !== undefined) {
             if (this.cursors.left.isDown) {
@@ -596,7 +588,7 @@ class SceneGrid extends Phaser.Scene {
                         changed = true;
                         this.drop_counter = 0;
                     } else {
-                        this.game_state = game_state_set;
+                        should_settle = true;
                     }
                 }
                 ++this.ticks_pressing_shove;
@@ -610,9 +602,14 @@ class SceneGrid extends Phaser.Scene {
             if (this.cells_active_can_move(this.active_pos_row - 1, this.active_pos_col, this.active_rotation)) {
                 --this.active_pos_row;
             } else {
-                this.active_set();
-                this.game_state = game_state_set;
+                should_settle = true;
             }
+            changed = true;
+        }
+
+        if (should_settle) {
+            this.active_set();
+            this.game_state = game_state_settle;
             changed = true;
         }
 
