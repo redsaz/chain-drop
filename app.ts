@@ -485,16 +485,17 @@ class SceneGrid extends Phaser.Scene {
                     break;
                 }
                 case game_state_settle: {
-                    if (this.settle_counter < 15) {
-                        ++this.settle_counter;
-                    } else if (!this.drop_dangling_cells()) {
-                        // TODO: This should not be instant.
-                        let series_to_clear = this.get_cells_to_clear();
-                        series_to_clear.forEach(series => series.forEach(cell => this.grid_delete(...cell)));
+                    ++this.settle_counter;
+                    if (this.settle_counter % 15 == 0) {
+                        if (!this.drop_dangling_cells()) {
+                            // TODO: This should not be instant.
+                            let series_to_clear = this.get_cells_to_clear();
+                            series_to_clear.forEach(series => series.forEach(cell => this.grid_delete(...cell)));
 
-                        if (series_to_clear.length == 0) {
-                            this.settle_counter = 0;
-                            this.game_state = game_state_releasing;
+                            if (series_to_clear.length == 0) {
+                                this.settle_counter = 0;
+                                this.game_state = game_state_releasing;
+                            }
                         }
                     }
                     break;
