@@ -275,11 +275,6 @@ class SceneGrid extends Phaser.Scene {
         while (this.cells_active_display.length) {
             this.cells_active_display.shift()?.destroy();
         }
-
-        // TODO: This should not be instant.
-        let series_to_clear = this.get_cells_to_clear();
-        console.log("Series to clear: " + series_to_clear.length);
-        series_to_clear.forEach(series => series.forEach(cell => this.grid_delete(...cell)));
     }
 
     // Returns sets of cells to clear from the board (but doesn't clear them itself).
