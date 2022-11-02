@@ -367,8 +367,10 @@ class SceneGrid extends Phaser.Scene {
 
     // For debugging purposes only, this isn't actually part of the game.
     receivedSet(): void {
-        this.activeSet();
-        this.gameState = GAME_STATE_SETTLE;
+        if (ENABLE_DEBUG) {
+            this.activeSet();
+            this.gameState = GAME_STATE_SETTLE;
+        }
     }
 
     // Drop (by one) all cells that are not settled.
@@ -418,12 +420,14 @@ class SceneGrid extends Phaser.Scene {
 
     create(): void {
         this.add.rectangle(128, 256, 256, 512, 0, 0.5)
-        this.debugText = this.add.text(4, 4, 'NNN', { font: '20px Sans-Serif', color: '#000' });
+        if (ENABLE_DEBUG) {
+            this.debugText = this.add.text(4, 4, 'NNN', { font: '20px Sans-Serif', color: '#000' });
 
-        // Add some obstacles on the board
-        this.gridSet(0, 0, CELL_1 | CELL_TARGET);
-        this.gridSet(1, 3, CELL_2 | CELL_TARGET);
-        this.gridSet(5, 7, CELL_3 | CELL_TARGET);
+            // Add some obstacles on the board
+            this.gridSet(0, 0, CELL_1 | CELL_TARGET);
+            this.gridSet(1, 3, CELL_2 | CELL_TARGET);
+            this.gridSet(5, 7, CELL_3 | CELL_TARGET);
+        }
 
         // Init the active cells
         this.activePosRow = this.startRow;
@@ -434,6 +438,9 @@ class SceneGrid extends Phaser.Scene {
         if (this.input.keyboard !== null) {
             this.cursors = this.input.keyboard.createCursorKeys();
             this.cursors.space.on('down', this.receivedRotate, this);
+            if (!ENABLE_DEBUG) {
+                this.cursors.up.on('down', this.receivedRotate, this);
+            }
             this.cursors.shift.on('down', this.receivedSet, this);
         }
     }
@@ -504,7 +511,7 @@ class SceneGrid extends Phaser.Scene {
             ++this.ticks;
         }
 
-        if (this.debugText != undefined) {
+        if (ENABLE_DEBUG && this.debugText != undefined) {
             let stateText = "unknown";
             switch (this.gameState) {
                 case GAME_STATE_PREGAME: {
@@ -568,11 +575,13 @@ class SceneGrid extends Phaser.Scene {
                 this.ticksPressingRight = 0;
             }
             if (this.cursors.up.isDown) {
-                // If the active cells can go up, then go.
-                // This action is for debug purposes only.
-                if (this.cellsActiveCanMove(this.activePosRow + 1, this.activePosCol, this.activeRotation)) {
-                    ++this.activePosRow;
-                    changed = true;
+                if (ENABLE_DEBUG) {
+                    // If the active cells can go up, then go.
+                    // This action is for debug purposes only.
+                    if (this.cellsActiveCanMove(this.activePosRow + 1, this.activePosCol, this.activeRotation)) {
+                        ++this.activePosRow;
+                        changed = true;
+                    }
                 }
             }
             if (this.cursors.down.isDown) {
