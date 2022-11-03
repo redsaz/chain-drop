@@ -30,6 +30,8 @@ const CELL_1 = 0b0000_0001;
 const CELL_2 = 0b0000_0010;
 const CELL_3 = 0b0000_0011;
 
+const CELL_TYPES = [CELL_1, CELL_2, CELL_3];
+
 const SHIFT_TICKS_REPEAT_DELAY = 15;
 const SHIFT_TICKS_REPEAT_RATE = 6;
 const SHOVE_TICKS_REPEAT_DELAY = 2;
@@ -423,17 +425,26 @@ class SceneGrid extends Phaser.Scene {
         if (ENABLE_DEBUG) {
             this.debugText = this.add.text(4, 4, 'NNN', { font: '20px Sans-Serif', color: '#000' });
 
-            // Add some obstacles on the board
+            // Add some targets on the board
             this.gridSet(0, 0, CELL_1 | CELL_TARGET);
             this.gridSet(1, 3, CELL_2 | CELL_TARGET);
             this.gridSet(5, 7, CELL_3 | CELL_TARGET);
+        } else {
+            // Add some targets on the board
+            // TODO this will need refined to not clobber targets or have longer than 2 chains
+            for (let i = 0; i < 12; ++i) {
+                let row =  Math.floor(Math.random() * (this.gridRows - 6));
+                let col =  Math.floor(Math.random() * (this.gridCols));
+                let target = CELL_TYPES[Math.floor(Math.random() * CELL_TYPES.length)] | CELL_TARGET;
+                this.gridSet(row, col, target);
+            }
         }
 
         // Init the active cells
         this.activePosRow = this.startRow;
         this.activePosCol = this.startCol;
         this.activeRotation = 0;
-        this.cellsActive.push(CELL_1, CELL_2)
+        // this.cellsActive.push(CELL_1, CELL_2)
 
         if (this.input.keyboard !== null) {
             this.cursors = this.input.keyboard.createCursorKeys();
@@ -466,6 +477,15 @@ class SceneGrid extends Phaser.Scene {
                     break;
                 }
                 case GAME_STATE_RELEASING: {
+                    if (!ENABLE_DEBUG) {
+                        // TODO Find better place for getting next cell colors.
+                        this.cellsActive.length = 0;
+                        this.cellsActive.push(CELL_TYPES[Math.floor(Math.random() * CELL_TYPES.length)]);
+                        this.cellsActive.push(CELL_TYPES[Math.floor(Math.random() * CELL_TYPES.length)]);
+                    } else {
+                        this.cellsActive.length = 0;
+                        this.cellsActive.push(CELL_1, CELL_2);
+                    }
                     if (this.releaseCounter < 45) {
                         ++this.releaseCounter;
                     } else {
