@@ -353,10 +353,17 @@ class SceneGrid extends Phaser.Scene {
     }
 
     receivedRotate(): void {
-        // If the active cells can rotate, then go
-        let rotation = (this.activeRotation + 1) % 4
-        if (this.cellsActiveCanMove(this.activePosRow, this.activePosCol, rotation)) {
+        // If the proposed rotation will not clobber a filled cell, then allow it, but if rotating
+        // from a vertical position to a horizontal one and it would clobber a filled cell,
+        // try kicking left one col. If no clobbers, then go with that.
+        let rotation = (this.activeRotation + 1) % 4;
+        let posCol = this.activePosCol;
+        if (!this.cellsActiveCanMove(this.activePosRow, posCol, rotation) && (rotation % 2) == 0) {
+            --posCol;
+        }
+        if (this.cellsActiveCanMove(this.activePosRow, posCol, rotation)) {
             this.activeRotation = rotation;
+            this.activePosCol = posCol;
 
             // Update display
             // Delete the current sprites then create new ones at correct position
