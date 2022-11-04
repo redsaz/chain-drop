@@ -52,7 +52,7 @@ class SceneGrid extends Phaser.Scene {
     ticksLeftover: number = 0; // sometimes a little extra or a little less delta is between updates.
 
     gameState = GAME_STATE_PREGAME;
-    gridRows = 16;
+    gridRows = 17;
     gridCols = 8;
     grid: integer[] = Array(this.gridRows * this.gridCols);
     startRow = 15;
@@ -81,7 +81,7 @@ class SceneGrid extends Phaser.Scene {
 
     rowToY(row: integer): integer {
         // rows go from bottom (0) to top (15), which is reverse of how pixels are done.
-        return 512 - (row * 32 + 16);
+        return 544 - (row * 32 + 16);
     }
 
     cellToScene(row: integer, col: integer, cellValue: integer): Phaser.GameObjects.Sprite | null {
@@ -272,6 +272,11 @@ class SceneGrid extends Phaser.Scene {
             this.gridSet(abs[0], abs[1], abs[2]);
         });
 
+        // Clear the grid's topmost row of cells, as cells shouldn't be set there
+        for (let col = 0; col < this.gridCols; ++col) {
+            this.gridDelete(this.gridRows - 1, col);
+        }
+
         // Delete the active sprites
         while (this.cellsActiveDisplay.length) {
             this.cellsActiveDisplay.shift()?.destroy();
@@ -424,11 +429,11 @@ class SceneGrid extends Phaser.Scene {
         this.load.image('target', 'assets/pics/target.png');
         this.load.image('joined', 'assets/pics/joined.png');
         this.load.image('filled', 'assets/pics/filled.png');
-        this.cameras.main.setViewport(272, 70, 256, 512)
+        this.cameras.main.setViewport(272, 38, 256, 544)
     }
 
     create(): void {
-        this.add.rectangle(128, 256, 256, 512, 0, 0.5)
+        this.add.rectangle(128, 272, 256, 544, 0, 0.5)
         if (ENABLE_DEBUG) {
             this.debugText = this.add.text(4, 4, 'NNN', { font: '20px Sans-Serif', color: '#000' });
 
