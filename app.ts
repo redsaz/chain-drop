@@ -425,6 +425,53 @@ class SceneGrid extends Phaser.Scene {
         return dropped;
     }
 
+    sameType(cell: integer, ...cells: integer[]): boolean {
+        return cells.every(c => (c & CELL_TYPE_MASK) == (cell & CELL_TYPE_MASK));
+    }
+
+    canPlaceTarget(row: number, col: number, cell: integer): boolean {
+        // If the placement would collide with a filled cell, then the answer is no.
+        if (this.gridGet(row, col) != CELL_EMPTY) {
+            return false;
+        }
+
+        // If the placement results in three or more consecutive targets of the same type, then
+        // it cannot be placed there.
+        let cellType = cell & CELL_TYPE_MASK;
+
+        // If two cells left...
+        if (col >= 2 && this.sameType(this.gridGet(row, col - 2), this.gridGet(row, col - 1), cellType)) {
+            return false;
+        }
+
+        // If one cell left and one cell right...
+        if (col >= 1 && col <= this.gridCols - 2 && this.sameType(this.gridGet(row, col - 1), cellType, this.gridGet(row, col + 1))) {
+            return false;
+        }
+
+        // If two cells right...
+        if (col <= this.gridCols - 3 && this.sameType(cellType, this.gridGet(row, col + 1), this.gridGet(row, col + 2))) {
+            return false;
+        }
+
+        // If two cells below...
+        if (row >= 2 && this.sameType(this.gridGet(row - 2, col), this.gridGet(row - 1, col), cellType)) {
+            return false;
+        }
+
+        // If one cell below and one cell above...
+        if (row >= 1 && col <= this.gridRows - 2 && this.sameType(this.gridGet(row - 1, col), cellType, this.gridGet(row + 1, col))) {
+            return false;
+        }
+
+        // If two cells above...
+        if (row <= this.gridRows - 3 && this.sameType(cellType, this.gridGet(row + 1, col), this.gridGet(row + 2, col))) {
+            return false;
+        }
+
+        return true;
+    }
+
     preload(): void {
         this.load.image('target', 'assets/pics/target.png');
         this.load.image('joined', 'assets/pics/joined.png');
@@ -443,12 +490,26 @@ class SceneGrid extends Phaser.Scene {
             this.gridSet(5, 7, CELL_3 | CELL_TARGET);
         } else {
             // Add some targets on the board
-            // TODO this will need refined to not clobber targets or have longer than 2 chains
+            let maxRow = this.gridRows - 7;
             for (let i = 0; i < 12; ++i) {
-                let row =  Math.floor(Math.random() * (this.gridRows - 6));
-                let col =  Math.floor(Math.random() * (this.gridCols));
+                let row = Math.floor(Math.random() * maxRow);
+                let col = Math.floor(Math.random() * (this.gridCols));
                 let target = CELL_TYPES[Math.floor(Math.random() * CELL_TYPES.length)] | CELL_TARGET;
-                this.gridSet(row, col, target);
+                let placed = false;
+                for (let attempts = 0; attempts < maxRow * this.gridCols; ++attempts) {
+                    if (this.canPlaceTarget(row, col, target)) {
+                        this.gridSet(row, col, target);
+                        break;
+                    }
+                    ++col;
+                    if (col >= this.gridCols) {
+                        col = 0;
+                        --row;
+                        if (row < 0) {
+                            row = maxRow - 1;
+                        }
+                    }
+                }
             }
         }
 
