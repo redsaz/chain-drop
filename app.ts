@@ -212,7 +212,7 @@ class SceneGrid extends Phaser.Scene {
     }
 
     // Deletes the cell at the location, and "unjoins" any cells joined to that cell.
-    gridDelete(row: number, col: number) {
+    gridDelete(row: number, col: number): integer {
         let old = this.gridGet(row, col);
         // If cell is connected above, remove that cell's respective join.
         if ((old & CELL_JOINED_TOP) != 0) {
@@ -231,6 +231,7 @@ class SceneGrid extends Phaser.Scene {
             this.gridSet(row, col - 1, this.gridGet(row, col - 1) & ~CELL_JOINED_RIGHT);
         }
         this.gridSet(row, col, CELL_EMPTY);
+        return old;
     }
 
     constructor() {
@@ -266,7 +267,7 @@ class SceneGrid extends Phaser.Scene {
         return legit;
     }
 
-    activeSet() {
+    activeSet(): void {
         this.cellsActive.forEach((cell, index) => {
             let abs = this.cellActiveGetPosAbsolute(this.activePosRow, this.activePosCol, this.activeRotation, index, cell);
             this.gridSet(abs[0], abs[1], abs[2]);
@@ -358,6 +359,11 @@ class SceneGrid extends Phaser.Scene {
     }
 
     receivedRotate(): void {
+        // Can only rotate when active cell is in play
+        if (this.gameState != GAME_STATE_ACTIVE) {
+            return;
+        }
+
         // If the proposed rotation will not clobber a filled cell, then allow it, but if rotating
         // from a vertical position to a horizontal one and it would clobber a filled cell,
         // try kicking left one col. If no clobbers, then go with that.
