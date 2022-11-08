@@ -234,8 +234,8 @@ class SceneGrid extends Phaser.Scene {
         return old;
     }
 
-    constructor() {
-        super({ key: 'SceneGrid', active: true });
+    constructor(config?: Phaser.Types.Core.GameConfig) {
+        super(config ?? { key: 'SceneGrid', active: true });
 
         for (let i = 0; i < this.gridRows * this.gridCols; ++i) {
             this.grid[i] = CELL_EMPTY;
@@ -482,10 +482,11 @@ class SceneGrid extends Phaser.Scene {
         this.load.image('target', 'assets/pics/target.png');
         this.load.image('joined', 'assets/pics/joined.png');
         this.load.image('filled', 'assets/pics/filled.png');
-        this.cameras.main.setViewport(272, 38, 256, 544)
+        this.cameras.main.setViewport(272, 38, 256, 544);
     }
 
-    create(): void {
+    create(data: any): void {
+        let numTargets = data.numTargets ?? 4;
         this.add.rectangle(128, 272, 256, 544, 0, 0.5)
         if (ENABLE_DEBUG) {
             this.debugText = this.add.text(4, 4, 'NNN', { font: '20px Sans-Serif', color: '#000' });
@@ -497,7 +498,7 @@ class SceneGrid extends Phaser.Scene {
         } else {
             // Add some targets on the board
             let maxRow = this.gridRows - 7;
-            for (let i = 0; i < 12; ++i) {
+            for (let i = 0; i < numTargets; ++i) {
                 let row = Math.floor(Math.random() * maxRow);
                 let col = Math.floor(Math.random() * (this.gridCols));
                 let target = CELL_TYPES[Math.floor(Math.random() * CELL_TYPES.length)] | CELL_TARGET;
@@ -739,8 +740,10 @@ let config = {
     width: 800,
     height: 600,
     parent: 'content',
-    backgroundColor: '#253912',
-    scene: [SceneBackground, SceneGrid]
+    backgroundColor: '#253912'
 };
 
 const GAME = new Phaser.Game(config);
+
+GAME.scene.add('SceneBackground', SceneBackground, true);
+GAME.scene.add('SceneGrid', SceneGrid, true, { numTargets: 1 });
