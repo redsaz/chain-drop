@@ -737,10 +737,16 @@ function repeaty(ticksActive: number, ticksRepeatDelay: number, ticksRepeatRate:
 
 let config = {
     type: Phaser.AUTO,
-    width: 800,
-    height: 600,
     parent: 'content',
-    backgroundColor: '#253912'
+    backgroundColor: '#253912',
+    scale: {
+        mode: Phaser.Scale.FIT,
+        parent: 'phaser-example',
+        width: 800,
+        height: 600,
+        zoom: 1,
+        autoCenter: Phaser.Scale.Center.CENTER_BOTH
+    }
 };
 
 const GAME = new Phaser.Game(config);
