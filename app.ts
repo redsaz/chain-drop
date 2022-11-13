@@ -29,6 +29,9 @@ const CELL_TARGET = 0b0000_1000;
 const CELL_1 = 0b0000_0001;
 const CELL_2 = 0b0000_0010;
 const CELL_3 = 0b0000_0011;
+const CELL_1_COLOR = 0xff0000;
+const CELL_2_COLOR = 0x00ff00;
+const CELL_3_COLOR = 0x4466ff;
 
 const CELL_TYPES = [CELL_1, CELL_2, CELL_3];
 
@@ -42,6 +45,58 @@ const GAME_STATE_ACTIVE = 3; // The player can control the active cells
 const GAME_STATE_SETTLE = 4; // The active cells have been set, and possibly cleared and gravity needs to affect the board.
 const GAME_STATE_DONE_LOST = 5; // The game is finished, the player lost.
 const GAME_STATE_DONE_WON = 6; // The game is finished, the player won.
+
+class SceneTargetTotals extends Phaser.Scene {
+
+    targetTotals = new Barfy(); // Will be replaced with instance from create
+    oldTargetTotals = new Barfy(); // If different, update text
+    text1: Phaser.GameObjects.Text | undefined;
+    text2: Phaser.GameObjects.Text | undefined;
+    text3: Phaser.GameObjects.Text | undefined;
+
+    constructor() {
+        super({ key: 'SceneTargetTotals', active: true });
+    }
+
+    preload(): void {
+        this.load.image('target', 'assets/pics/target.png');
+        this.cameras.main.setViewport(60, 350, 160, 210);
+    }
+
+    create(data: any): void {
+        this.targetTotals = data.targetTotals ?? this.targetTotals;
+        this.add.rectangle(80, 105, 200, 220, 0, 0.5);
+        let cell1 = this.add.sprite(40, 44, 'target').setScale(0.125, 0.125).setTint(CELL_1_COLOR);
+        let cell2 = this.add.sprite(40, 104, 'target').setScale(0.125, 0.125).setTint(CELL_2_COLOR);
+        let cell3 = this.add.sprite(40, 164, 'target').setScale(0.125, 0.125).setTint(CELL_3_COLOR);
+        this.tweens.add({
+            targets: [cell1, cell2, cell3],
+            angle: 360,
+            repeat: -1,
+            duration: 1000
+        });
+
+        this.text1 = this.add.text(35, 25, '0', { font: '30px Sans-Serif', fontStyle: 'strong', color: '#fff', stroke: '#000', strokeThickness: 5, align: 'right', fixedWidth: 100 });
+        this.text2 = this.add.text(35, 85, '0', { font: '30px Sans-Serif', fontStyle: 'strong', color: '#fff', stroke: '#000', strokeThickness: 5, align: 'right', fixedWidth: 100 });
+        this.text3 = this.add.text(35, 145, '0', { font: '30px Sans-Serif', fontStyle: 'strong', color: '#fff', stroke: '#000', strokeThickness: 5, align: 'right', fixedWidth: 100 });
+    }
+
+    update(time: number, delta: number): void {
+        if (this.oldTargetTotals.cell1 != this.targetTotals.cell1) {
+            this.oldTargetTotals.cell1 = this.targetTotals.cell1;
+            this.text1?.setText(this.targetTotals.cell1.toString());
+        }
+        if (this.oldTargetTotals.cell2 != this.targetTotals.cell2) {
+            this.oldTargetTotals.cell2 = this.targetTotals.cell2;
+            this.text2?.setText(this.targetTotals.cell2.toString());
+        }
+        if (this.oldTargetTotals.cell3 != this.targetTotals.cell3) {
+            this.oldTargetTotals.cell3 = this.targetTotals.cell3;
+            this.text3?.setText(this.targetTotals.cell3.toString());
+        }
+    }
+}
+
 
 class SceneGrid extends Phaser.Scene {
     cursors: Phaser.Types.Input.Keyboard.CursorKeys | undefined;
@@ -63,6 +118,7 @@ class SceneGrid extends Phaser.Scene {
     cellsActive: integer[] = Array();
     dropCounter = 0;
     dropRate = 40;
+    targetTotals = new Barfy(); // a new instance should get passed in with create();
     releaseCounter = 0;
     settleCounter = 0;
 
@@ -119,11 +175,11 @@ class SceneGrid extends Phaser.Scene {
 
         let color = 0xffffff;
         if ((CELL_TYPE_MASK & cellValue) == 1) {
-            color = 0xff0000;
+            color = CELL_1_COLOR;
         } else if ((CELL_TYPE_MASK & cellValue) == 2) {
-            color = 0x00ff00;
+            color = CELL_2_COLOR;
         } else if ((CELL_TYPE_MASK & cellValue) == 3) {
-            color = 0x4466ff;
+            color = CELL_3_COLOR;
         }
         sprite.setTint(color);
 
@@ -487,6 +543,7 @@ class SceneGrid extends Phaser.Scene {
 
     create(data: any): void {
         let numTargets = data.numTargets ?? 4;
+        this.targetTotals = data.targetTotals ?? this.targetTotals;
         this.add.rectangle(128, 272, 256, 544, 0, 0.5)
         if (ENABLE_DEBUG) {
             this.debugText = this.add.text(4, 4, 'NNN', { font: '20px Sans-Serif', color: '#000' });
@@ -506,6 +563,13 @@ class SceneGrid extends Phaser.Scene {
                 for (let attempts = 0; attempts < maxRow * this.gridCols; ++attempts) {
                     if (this.canPlaceTarget(row, col, target)) {
                         this.gridSet(row, col, target);
+                        if ((target & CELL_TYPE_MASK) == CELL_1) {
+                            ++this.targetTotals.cell1;
+                        } else if ((target & CELL_TYPE_MASK) == CELL_2) {
+                            ++this.targetTotals.cell2;
+                        } else if ((target & CELL_TYPE_MASK) == CELL_3) {
+                            ++this.targetTotals.cell3;
+                        }
                         break;
                     }
                     ++col;
@@ -591,7 +655,19 @@ class SceneGrid extends Phaser.Scene {
                         if (!this.dropDanglingCells()) {
                             // TODO: This should not be instant.
                             let seriesToClear = this.getCellsToClear();
-                            seriesToClear.forEach(series => series.forEach(cell => this.gridDelete(...cell)));
+                            seriesToClear.forEach(series => series.forEach(cell => {
+                                let deleted = this.gridDelete(...cell);
+                                if ((deleted & CELL_TARGET) != 0) {
+                                    let deletedType = deleted & CELL_TYPE_MASK;
+                                    if (deletedType == CELL_1) {
+                                        --this.targetTotals.cell1;
+                                    } else if (deletedType == CELL_2) {
+                                        --this.targetTotals.cell2;
+                                    } else if (deletedType == CELL_3) {
+                                        --this.targetTotals.cell3;
+                                    }
+                                }
+                            }));
 
                             if (seriesToClear.length == 0) {
                                 this.settleCounter = 0;
@@ -725,7 +801,6 @@ class SceneGrid extends Phaser.Scene {
     }
 }
 
-
 function repeaty(ticksActive: number, ticksRepeatDelay: number, ticksRepeatRate: number): boolean {
     return ticksActive == 0
         || ticksActive == ticksRepeatDelay
@@ -733,6 +808,12 @@ function repeaty(ticksActive: number, ticksRepeatDelay: number, ticksRepeatRate:
             ticksActive > ticksRepeatDelay
             && ((ticksActive - ticksRepeatDelay) % ticksRepeatRate) == 0
         );
+}
+
+class Barfy {
+    cell1 = 0;
+    cell2 = 0;
+    cell3 = 0;
 }
 
 let config = {
@@ -751,5 +832,8 @@ let config = {
 
 const GAME = new Phaser.Game(config);
 
+let counter = new Barfy();
+
 GAME.scene.add('SceneBackground', SceneBackground, true);
-GAME.scene.add('SceneGrid', SceneGrid, true, { numTargets: 1 });
+GAME.scene.add('SceneTargetTotals', SceneTargetTotals, true, { targetTotals: counter });
+GAME.scene.add('SceneGrid', SceneGrid, true, { numTargets: 4, targetTotals: counter });
