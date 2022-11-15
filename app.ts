@@ -2,8 +2,8 @@
 
 class SceneBackground extends Phaser.Scene {
 
-    constructor() {
-        super({ key: 'SceneBackground', active: true });
+    constructor(config: Phaser.Types.Scenes.SettingsConfig) {
+        super(config);
     }
 
     preload(): void {
@@ -12,6 +12,26 @@ class SceneBackground extends Phaser.Scene {
 
     create(): void {
         this.add.image(400, 300, 'background');
+    }
+
+    update(time: number, delta: number): void {
+    }
+}
+
+class SceneLevelClear extends Phaser.Scene {
+
+    constructor(config: Phaser.Types.Scenes.SettingsConfig) {
+        super(config);
+    }
+
+    preload(): void {
+    }
+
+    create(): void {
+        var text = this.add.text(400, 300, 'CLEAR!', { fontSize: '66px', fontFamily: 'Sans-Serif', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 10, align: 'center' });
+        text.setX(this.cameras.default.centerX - (text.width / 2));
+        text.setY(this.cameras.default.centerY - (text.height / 2));
+
     }
 
     update(time: number, delta: number): void {
@@ -48,14 +68,14 @@ const GAME_STATE_DONE_WON = 6; // The game is finished, the player won.
 
 class SceneTargetTotals extends Phaser.Scene {
 
-    targetTotals = new Barfy(); // Will be replaced with instance from create
-    oldTargetTotals = new Barfy(); // If different, update text
+    targetTotals = new TargetTotals(); // Will be replaced with instance from create
+    oldTargetTotals = new TargetTotals(); // If different, update text
     text1: Phaser.GameObjects.Text | undefined;
     text2: Phaser.GameObjects.Text | undefined;
     text3: Phaser.GameObjects.Text | undefined;
 
-    constructor() {
-        super({ key: 'SceneTargetTotals', active: true });
+    constructor(config: Phaser.Types.Scenes.SettingsConfig) {
+        super(config);
     }
 
     preload(): void {
@@ -76,9 +96,9 @@ class SceneTargetTotals extends Phaser.Scene {
             duration: 1000
         });
 
-        this.text1 = this.add.text(35, 25, '0', { font: '30px Sans-Serif', fontStyle: 'strong', color: '#fff', stroke: '#000', strokeThickness: 5, align: 'right', fixedWidth: 100 });
-        this.text2 = this.add.text(35, 85, '0', { font: '30px Sans-Serif', fontStyle: 'strong', color: '#fff', stroke: '#000', strokeThickness: 5, align: 'right', fixedWidth: 100 });
-        this.text3 = this.add.text(35, 145, '0', { font: '30px Sans-Serif', fontStyle: 'strong', color: '#fff', stroke: '#000', strokeThickness: 5, align: 'right', fixedWidth: 100 });
+        this.text1 = this.add.text(35, 25, '0', { fontSize: '30px', fontFamily: 'Sans-Serif', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 5, align: 'right', fixedWidth: 100 });
+        this.text2 = this.add.text(35, 85, '0', { fontSize: '30px', fontFamily: 'Sans-Serif', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 5, align: 'right', fixedWidth: 100 });
+        this.text3 = this.add.text(35, 145, '0', { fontSize: '30px', fontFamily: 'Sans-Serif', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 5, align: 'right', fixedWidth: 100 });
     }
 
     update(time: number, delta: number): void {
@@ -118,7 +138,7 @@ class SceneGrid extends Phaser.Scene {
     cellsActive: integer[] = Array();
     dropCounter = 0;
     dropRate = 40;
-    targetTotals = new Barfy(); // a new instance should get passed in with create();
+    targetTotals = new TargetTotals(); // a new instance should get passed in with create();
     releaseCounter = 0;
     settleCounter = 0;
 
@@ -657,6 +677,7 @@ class SceneGrid extends Phaser.Scene {
                             let seriesToClear = this.getCellsToClear();
                             seriesToClear.forEach(series => series.forEach(cell => {
                                 let deleted = this.gridDelete(...cell);
+                                // Decrement the counter corresponding to the target cleared.
                                 if ((deleted & CELL_TARGET) != 0) {
                                     let deletedType = deleted & CELL_TYPE_MASK;
                                     if (deletedType == CELL_1) {
@@ -669,6 +690,12 @@ class SceneGrid extends Phaser.Scene {
                                 }
                             }));
 
+                            // If all the targets are gone, then the level is cleared.
+                            if (this.targetTotals.cell1 + this.targetTotals.cell2 + this.targetTotals.cell3 < 1) {
+                                this.gameState = GAME_STATE_DONE_WON;
+                            }
+
+                            // If nothing was cleared, then release the next active piece.
                             if (seriesToClear.length == 0) {
                                 this.settleCounter = 0;
                                 this.gameState = GAME_STATE_RELEASING;
@@ -681,6 +708,11 @@ class SceneGrid extends Phaser.Scene {
                     break;
                 }
                 case GAME_STATE_DONE_WON: {
+                    // TODO: This should not be instant.
+                    // let levelClearScene = this.game.scene.getScene("SceneLevelClear");
+                    if (!this.scene.isActive("SceneLevelClear")) {
+                        this.scene.run("SceneLevelClear")
+                    }
                     break;
                 }
             }
@@ -810,7 +842,7 @@ function repeaty(ticksActive: number, ticksRepeatDelay: number, ticksRepeatRate:
         );
 }
 
-class Barfy {
+class TargetTotals {
     cell1 = 0;
     cell2 = 0;
     cell3 = 0;
@@ -832,8 +864,9 @@ let config = {
 
 const GAME = new Phaser.Game(config);
 
-let counter = new Barfy();
+let counter = new TargetTotals();
 
 GAME.scene.add('SceneBackground', SceneBackground, true);
 GAME.scene.add('SceneTargetTotals', SceneTargetTotals, true, { targetTotals: counter });
-GAME.scene.add('SceneGrid', SceneGrid, true, { numTargets: 4, targetTotals: counter });
+GAME.scene.add('SceneGrid', SceneGrid, true, { numTargets: 1, targetTotals: counter });
+GAME.scene.add('SceneLevelClear', SceneLevelClear, false);
