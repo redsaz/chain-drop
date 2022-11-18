@@ -38,6 +38,26 @@ class SceneLevelClear extends Phaser.Scene {
     }
 }
 
+class SceneLevelLost extends Phaser.Scene {
+
+    constructor(config: Phaser.Types.Scenes.SettingsConfig) {
+        super(config);
+    }
+
+    preload(): void {
+    }
+
+    create(): void {
+        var text = this.add.text(400, 300, ['GAME', 'OVER'], { fontSize: '66px', fontFamily: 'Sans-Serif', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 10, align: 'center' });
+        text.setX(this.cameras.default.centerX - (text.width / 2));
+        text.setY(this.cameras.default.centerY - (text.height / 2));
+
+    }
+
+    update(time: number, delta: number): void {
+    }
+}
+
 const ENABLE_DEBUG = false;
 const CELL_TYPE_MASK = 0b0000_0111;
 const CELL_EMPTY = 0b0000_0000;
@@ -655,13 +675,22 @@ class SceneGrid extends Phaser.Scene {
                     } else {
                         this.releaseCounter = 0;
 
+                        // If any of the cells where the active cells are placed is filled, then game over.
+                        // (still place the active cells anyway, to show why)
+                        let start1 = this.gridGet(this.startRow, this.startCol);
+                        let start2 = this.gridGet(this.startRow, this.startCol + 1);
+
+                        this.gameState = GAME_STATE_ACTIVE;
+
                         // position and display the active cells
                         this.activePosRow = this.startRow;
                         this.activePosCol = this.startCol;
                         this.activeRotation = 0;
                         this.cellsActive.forEach((cell, index) => this.cellsActiveDisplay.push(this.cellActiveToScene(this.activePosRow, this.activePosCol, this.activeRotation, index, cell)));
 
-                        this.gameState = GAME_STATE_ACTIVE;
+                        if (start1 != CELL_EMPTY || start2 != CELL_EMPTY) {
+                            this.gameState = GAME_STATE_DONE_LOST;
+                        }
                     }
                     break;
                 }
@@ -705,11 +734,14 @@ class SceneGrid extends Phaser.Scene {
                     break;
                 }
                 case GAME_STATE_DONE_LOST: {
+                    // TODO: This should not be instant.
+                    if (!this.scene.isActive("SceneLevelLostr")) {
+                        this.scene.run("SceneLevelLost")
+                    }
                     break;
                 }
                 case GAME_STATE_DONE_WON: {
                     // TODO: This should not be instant.
-                    // let levelClearScene = this.game.scene.getScene("SceneLevelClear");
                     if (!this.scene.isActive("SceneLevelClear")) {
                         this.scene.run("SceneLevelClear")
                     }
@@ -870,3 +902,4 @@ GAME.scene.add('SceneBackground', SceneBackground, true);
 GAME.scene.add('SceneTargetTotals', SceneTargetTotals, true, { targetTotals: counter });
 GAME.scene.add('SceneGrid', SceneGrid, true, { numTargets: 1, targetTotals: counter });
 GAME.scene.add('SceneLevelClear', SceneLevelClear, false);
+GAME.scene.add('SceneLevelLost', SceneLevelLost, false);
