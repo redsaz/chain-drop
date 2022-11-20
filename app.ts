@@ -1,5 +1,34 @@
 /// <reference path="types/phaser.d.ts"t/>
 
+interface Level {
+    numTargets: integer;
+    highestRow: integer;
+}
+
+const LEVELS: Level[] = [
+    { numTargets: 4, highestRow: 10 },
+    { numTargets: 8, highestRow: 10 },
+    { numTargets: 12, highestRow: 10 },
+    { numTargets: 16, highestRow: 10 },
+    { numTargets: 20, highestRow: 10 },
+    { numTargets: 24, highestRow: 10 },
+    { numTargets: 28, highestRow: 10 },
+    { numTargets: 32, highestRow: 10 },
+    { numTargets: 36, highestRow: 10 },
+    { numTargets: 40, highestRow: 10 },
+    { numTargets: 44, highestRow: 10 },
+    { numTargets: 48, highestRow: 10 },
+    { numTargets: 52, highestRow: 10 },
+    { numTargets: 56, highestRow: 10 },
+    { numTargets: 60, highestRow: 10 },
+    { numTargets: 64, highestRow: 11 },
+    { numTargets: 68, highestRow: 11 },
+    { numTargets: 72, highestRow: 12 },
+    { numTargets: 76, highestRow: 12 },
+    { numTargets: 80, highestRow: 13 },
+    { numTargets: 84, highestRow: 13 },
+];
+
 class SceneBackground extends Phaser.Scene {
 
     constructor(config: Phaser.Types.Scenes.SettingsConfig) {
@@ -150,6 +179,7 @@ class SceneGrid extends Phaser.Scene {
     gridRows = 17;
     gridCols = 8;
     grid: integer[] = Array(this.gridRows * this.gridCols);
+    level = 0;
     startRow = 15;
     startCol = 3;
     activePosRow = 0;
@@ -582,7 +612,9 @@ class SceneGrid extends Phaser.Scene {
     }
 
     create(data: any): void {
-        let numTargets = data.numTargets ?? 4;
+        this.level = data.level ?? 0;
+        let level = LEVELS[Math.min(this.level, 20)];
+        let numTargets = level.numTargets;
         this.targetTotals = data.targetTotals ?? this.targetTotals;
         this.add.rectangle(128, 272, 256, 544, 0, 0.5)
         if (ENABLE_DEBUG) {
@@ -594,7 +626,7 @@ class SceneGrid extends Phaser.Scene {
             this.gridSet(5, 7, CELL_3 | CELL_TARGET);
         } else {
             // Add some targets on the board
-            let maxRow = this.gridRows - 7;
+            let maxRow = level.highestRow;
             for (let i = 0; i < numTargets; ++i) {
                 let row = Math.floor(Math.random() * maxRow);
                 let col = Math.floor(Math.random() * (this.gridCols));
@@ -900,6 +932,6 @@ let counter = new TargetTotals();
 
 GAME.scene.add('SceneBackground', SceneBackground, true);
 GAME.scene.add('SceneTargetTotals', SceneTargetTotals, true, { targetTotals: counter });
-GAME.scene.add('SceneGrid', SceneGrid, true, { numTargets: 1, targetTotals: counter });
+GAME.scene.add('SceneGrid', SceneGrid, true, { level: 20, targetTotals: counter });
 GAME.scene.add('SceneLevelClear', SceneLevelClear, false);
 GAME.scene.add('SceneLevelLost', SceneLevelLost, false);
