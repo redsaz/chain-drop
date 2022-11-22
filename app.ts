@@ -61,9 +61,17 @@ class SceneLevelClear extends Phaser.Scene {
         text.setX(this.cameras.default.centerX - (text.width / 2));
         text.setY(this.cameras.default.centerY - (text.height / 2));
 
+        this.input.keyboard?.addKey(13, false, false).on('down', this.goNext, this);
+        this.input.keyboard?.addKey(32, false, false).on('down', this.goNext, this);
     }
 
     update(time: number, delta: number): void {
+    }
+
+    // Move on from this screen
+    goNext(): void {
+                this.scene.get('SceneGrid').scene.restart();
+                this.scene.stop(this.scene.key);
     }
 }
 
@@ -604,14 +612,9 @@ class SceneGrid extends Phaser.Scene {
         return true;
     }
 
-    preload(): void {
-        this.load.image('target', 'assets/pics/target.png');
-        this.load.image('joined', 'assets/pics/joined.png');
-        this.load.image('filled', 'assets/pics/filled.png');
-        this.cameras.main.setViewport(272, 38, 256, 544);
-    }
-
-    create(data: any): void {
+    startup(data: any): void {
+        this.gameState = GAME_STATE_PREGAME;
+        this.grid.forEach((item, i, arr) => arr[i] = CELL_EMPTY);
         this.level = data.level ?? 0;
         let level = LEVELS[Math.min(this.level, 20)];
         let numTargets = level.numTargets;
@@ -670,6 +673,17 @@ class SceneGrid extends Phaser.Scene {
             }
             this.cursors.shift.on('down', this.receivedSet, this);
         }
+    }
+
+    preload(): void {
+        this.load.image('target', 'assets/pics/target.png');
+        this.load.image('joined', 'assets/pics/joined.png');
+        this.load.image('filled', 'assets/pics/filled.png');
+        this.cameras.main.setViewport(272, 38, 256, 544);
+    }
+
+    create(data: any): void {
+        this.startup(data);
     }
 
     update(time: number, delta: number): void {
@@ -932,6 +946,6 @@ let counter = new TargetTotals();
 
 GAME.scene.add('SceneBackground', SceneBackground, true);
 GAME.scene.add('SceneTargetTotals', SceneTargetTotals, true, { targetTotals: counter });
-GAME.scene.add('SceneGrid', SceneGrid, true, { level: 20, targetTotals: counter });
+GAME.scene.add('SceneGrid', SceneGrid, true, { level: 0, targetTotals: counter });
 GAME.scene.add('SceneLevelClear', SceneLevelClear, false);
 GAME.scene.add('SceneLevelLost', SceneLevelLost, false);
