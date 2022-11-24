@@ -1,5 +1,21 @@
 /// <reference path="types/phaser.d.ts"t/>
 
+class TargetTotals {
+    cell1 = 0;
+    cell2 = 0;
+    cell3 = 0;
+}
+
+interface GameSettings {
+    level: integer;
+    speed: number;
+}
+
+interface GameThingies {
+    gameSettings: GameSettings;
+    targetTotals: TargetTotals;
+}
+
 interface Level {
     numTargets: integer;
     highestRow: integer;
@@ -49,6 +65,8 @@ class SceneBackground extends Phaser.Scene {
 
 class SceneLevelClear extends Phaser.Scene {
 
+    gameThingies: GameThingies | undefined;
+
     constructor(config: Phaser.Types.Scenes.SettingsConfig) {
         super(config);
     }
@@ -56,13 +74,15 @@ class SceneLevelClear extends Phaser.Scene {
     preload(): void {
     }
 
-    create(): void {
+    create(data: GameThingies): void {
         var text = this.add.text(400, 300, 'CLEAR!', { fontSize: '66px', fontFamily: 'Sans-Serif', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 10, align: 'center' });
         text.setX(this.cameras.default.centerX - (text.width / 2));
         text.setY(this.cameras.default.centerY - (text.height / 2));
 
         this.input.keyboard?.addKey(13, false, false).on('down', this.goNext, this);
         this.input.keyboard?.addKey(32, false, false).on('down', this.goNext, this);
+
+        gameThingies = data;
     }
 
     update(time: number, delta: number): void {
@@ -70,8 +90,11 @@ class SceneLevelClear extends Phaser.Scene {
 
     // Move on from this screen
     goNext(): void {
-                this.scene.get('SceneGrid').scene.restart();
-                this.scene.stop(this.scene.key);
+        if (gameThingies != undefined) {
+            gameThingies.gameSettings.level++;
+        }
+        this.scene.get('SceneGrid').scene.restart();
+        this.scene.stop(this.scene.key);
     }
 }
 
@@ -612,10 +635,10 @@ class SceneGrid extends Phaser.Scene {
         return true;
     }
 
-    startup(data: any): void {
+    startup(data: GameThingies): void {
         this.gameState = GAME_STATE_PREGAME;
         this.grid.forEach((item, i, arr) => arr[i] = CELL_EMPTY);
-        this.level = data.level ?? 0;
+        this.level = data.gameSettings.level ?? 0;
         let level = LEVELS[Math.min(this.level, 20)];
         let numTargets = level.numTargets;
         this.targetTotals = data.targetTotals ?? this.targetTotals;
@@ -682,7 +705,7 @@ class SceneGrid extends Phaser.Scene {
         this.cameras.main.setViewport(272, 38, 256, 544);
     }
 
-    create(data: any): void {
+    create(data: GameThingies): void {
         this.startup(data);
     }
 
@@ -920,12 +943,6 @@ function repeaty(ticksActive: number, ticksRepeatDelay: number, ticksRepeatRate:
         );
 }
 
-class TargetTotals {
-    cell1 = 0;
-    cell2 = 0;
-    cell3 = 0;
-}
-
 let config = {
     type: Phaser.AUTO,
     parent: 'content',
@@ -943,9 +960,11 @@ let config = {
 const GAME = new Phaser.Game(config);
 
 let counter = new TargetTotals();
+let gameSettings: GameSettings = { level: 20, speed: 40 };
+let gameThingies: GameThingies = { gameSettings: gameSettings, targetTotals: counter };
 
 GAME.scene.add('SceneBackground', SceneBackground, true);
 GAME.scene.add('SceneTargetTotals', SceneTargetTotals, true, { targetTotals: counter });
-GAME.scene.add('SceneGrid', SceneGrid, true, { level: 0, targetTotals: counter });
-GAME.scene.add('SceneLevelClear', SceneLevelClear, false);
+GAME.scene.add('SceneGrid', SceneGrid, true, gameThingies);
+GAME.scene.add('SceneLevelClear', SceneLevelClear, false, gameThingies);
 GAME.scene.add('SceneLevelLost', SceneLevelLost, false);
