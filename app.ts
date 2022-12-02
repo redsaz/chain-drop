@@ -243,8 +243,34 @@ class SceneNextCells extends Phaser.Scene {
         this.leftCell?.setTint(getCellColor(leftCellType));
         this.rightCell?.setTint(getCellColor(rightCellType));
     }
+}
 
+class SceneLevelInfo extends Phaser.Scene {
 
+    levelText: Phaser.GameObjects.Text | undefined;
+
+    constructor(config: Phaser.Types.Scenes.SettingsConfig) {
+        super(config);
+    }
+
+    preload(): void {
+        this.cameras.main.setViewport(575, 160, 160, 88);
+    }
+
+    create(data: GameThingies): void {
+        this.add.rectangle(0, 0, 320, 176, 0, 0.5);
+        this.add.text(0, 10, 'LEVEL', { fontSize: '20px', fontFamily: 'Sans-Serif', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 4, align: 'center', fixedWidth: 160 });
+        this.levelText = this.add.text(0, 40, '0', { fontSize: '30px', fontFamily: 'Sans-Serif', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 5, align: 'center', fixedWidth: 160 });
+
+        data.boardEvents.on('newBoard', this.handler, this);
+    }
+
+    update(time: number, delta: number): void {
+    }
+
+    handler(level: integer): void {
+        this.levelText?.setText(level.toString());
+    }
 }
 
 class SceneGrid extends Phaser.Scene {
@@ -694,6 +720,7 @@ class SceneGrid extends Phaser.Scene {
         let level = LEVELS[Math.min(this.level, 20)];
         let numTargets = level.numTargets;
         this.targetTotals = data.targetTotals ?? this.targetTotals;
+        this.gameThingies.boardEvents.emit('newBoard', this.level);
         this.add.rectangle(128, 272, 256, 544, 0, 0.5);
         this.cellsNext.length = 0;
         this.cellsNext.push(CELL_TYPES[Math.floor(Math.random() * CELL_TYPES.length)]);
@@ -1021,6 +1048,7 @@ let gameThingies: GameThingies = { gameSettings: gameSettings, targetTotals: cou
 GAME.scene.add('SceneBackground', SceneBackground, true);
 GAME.scene.add('SceneTargetTotals', SceneTargetTotals, true, { targetTotals: counter });
 GAME.scene.add('SceneNextCells', SceneNextCells, true, gameThingies);
+GAME.scene.add('SceneLevelInfo', SceneLevelInfo, true, gameThingies);
 GAME.scene.add('SceneGrid', SceneGrid, true, gameThingies);
 GAME.scene.add('SceneLevelClear', SceneLevelClear, false, gameThingies);
 GAME.scene.add('SceneLevelLost', SceneLevelLost, false);
