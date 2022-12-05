@@ -445,8 +445,24 @@ class SceneGrid extends Phaser.Scene {
         }
     }
 
+    gridMove(row: number, col: number, rowChange: number, colChange: number) {
+        let sourceIndex = row * this.gridCols + col;
+        let targetIndex = (row + rowChange) * this.gridCols + col + colChange;
+        let sourceCell = this.grid[sourceIndex];
+        let oldTargetCell = this.grid[targetIndex];
+        if (oldTargetCell != CELL_EMPTY) {
+            let sprite = this.gridDisplay[targetIndex];
+            sprite?.destroy();
+        }
+        this.grid[targetIndex] = sourceCell;
+        this.grid[sourceIndex] = CELL_EMPTY;
+        this.gridDisplay[targetIndex] = this.gridDisplay[sourceIndex];
+        this.gridDisplay[sourceIndex] = null;
+        this.gridDisplay[targetIndex]?.setPosition(this.colToX(col + colChange), this.rowToY(row + rowChange));
+    }
+
     // Deletes the cell at the location, and "unjoins" any cells joined to that cell.
-    gridDelete(row: number, col: number): integer {
+    gridDelete(fancy: boolean, row: number, col: number): integer {
         let old = this.gridGet(row, col);
         // If cell is connected above, remove that cell's respective join.
         if ((old & CELL_JOINED_TOP) != 0) {
@@ -464,7 +480,29 @@ class SceneGrid extends Phaser.Scene {
         if ((old & CELL_JOINED_LEFT) != 0) {
             this.gridSet(row, col - 1, this.gridGet(row, col - 1) & ~CELL_JOINED_RIGHT);
         }
-        this.gridSet(row, col, CELL_EMPTY);
+
+        // Fancy delete the given cell
+        let index = row * this.gridCols + col;
+        let oldCell = this.grid[index];
+        if (oldCell != CELL_EMPTY) {
+            this.grid[index] = CELL_EMPTY;
+            let sprite = this.gridDisplay[index];
+            if (fancy) {
+                this.tweens.add({
+                    targets: sprite,
+                    alpha: 0,
+                    scaleX: 0,
+                    scaleY: 0,
+                    persist: false,
+                    duration: 250,
+                    callbackScope: sprite,
+                    onComplete: () => sprite?.destroy()
+                });
+            } else {
+                sprite?.destroy();
+            }
+        }
+
         return old;
     }
 
@@ -509,7 +547,7 @@ class SceneGrid extends Phaser.Scene {
 
         // Clear the grid's topmost row of cells, as cells shouldn't be set there
         for (let col = 0; col < this.gridCols; ++col) {
-            this.gridDelete(this.gridRows - 1, col);
+            this.gridDelete(false, this.gridRows - 1, col);
         }
 
         // Delete the active sprites
@@ -655,9 +693,7 @@ class SceneGrid extends Phaser.Scene {
                 let shouldDrop = dropline[col];
                 dropped ||= shouldDrop;
                 if (shouldDrop) {
-                    let cell = this.gridGet(row, col);
-                    this.gridSet(row - 1, col, cell);
-                    this.gridSet(row, col, CELL_EMPTY);
+                    this.gridMove(row, col, -1, 0);
                 }
             }
         }
@@ -856,7 +892,7 @@ class SceneGrid extends Phaser.Scene {
                             // TODO: This should not be instant.
                             let seriesToClear = this.getCellsToClear();
                             seriesToClear.forEach(series => series.forEach(cell => {
-                                let deleted = this.gridDelete(...cell);
+                                let deleted = this.gridDelete(true, ...cell);
                                 // Decrement the counter corresponding to the target cleared.
                                 if ((deleted & CELL_TARGET) != 0) {
                                     let deletedType = deleted & CELL_TYPE_MASK;
