@@ -14,6 +14,8 @@ interface GameSettings {
 interface GameThingies {
     gameSettings: GameSettings;
     targetTotals: TargetTotals;
+    controlsState: ControlsState;
+    controlsEvents: Phaser.Events.EventEmitter;
     boardEvents: Phaser.Events.EventEmitter;
 }
 
@@ -62,6 +64,69 @@ class SceneBackground extends Phaser.Scene {
 
     update(time: number, delta: number): void {
     }
+}
+
+class SceneMultitouch extends Phaser.Scene {
+
+    controlsEvents = new Phaser.Events.EventEmitter();
+
+    press = Symbol("press");
+    release = Symbol("release");
+
+    btns: Phaser.GameObjects.Sprite[] = [];
+
+    constructor(config: Phaser.Types.Scenes.SettingsConfig) {
+        super(config);
+    }
+
+    preload(): void {
+        this.load.image('target', 'assets/pics/target.png');
+    }
+
+    create(data: GameThingies): void {
+        this.controlsEvents = data.controlsEvents;
+        this.input.addPointer(3);
+
+        let left = this.add.sprite(100, 500, 'target').setScale(0.75, 0.75).setTint(CELL_1_COLOR).setAlpha(0.5);
+        this.btns.push(left);
+
+        this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => this.pointer(pointer));
+        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => this.pointer(pointer));
+        this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => this.pointer(pointer));
+
+        left.on(this.press, (pointer: Phaser.Input.Pointer) => {
+            left.setTint(0xffffff);
+            console.log(pointer.id + " pressing");
+            this.controlsEvents.emit('_internal_leftpressed');
+        });
+        left.on(this.release, (pointer: Phaser.Input.Pointer) => {
+            left.setTint(0xff0000);
+            console.log(pointer.id + " released");
+            this.controlsEvents.emit('_internal_leftreleased');
+        });
+    }
+
+    update(time: number, delta: number): void {
+    }
+
+    pointer(pointer: Phaser.Input.Pointer): void {
+        this.btns.forEach(btn => {
+            let bounds: Phaser.Geom.Rectangle = btn.getBounds();
+
+            if (pointer.leftButtonDown() && bounds.contains(pointer.x, pointer.y)) {
+                if (!btn.getData('pressed')) {
+                    btn.setData('pressed', true);
+                    btn.emit(this.press, pointer);
+                }
+            } else {
+                if (btn.getData('pressed')) {
+                    btn.setData('pressed', false);
+                    btn.emit(this.release, pointer);
+                }
+            }
+        });
+    }
+
 }
 
 class SceneLevelClear extends Phaser.Scene {
@@ -158,6 +223,161 @@ const GAME_STATE_ACTIVE = 3; // The player can control the active cells
 const GAME_STATE_SETTLE = 4; // The active cells have been set, and possibly cleared and gravity needs to affect the board.
 const GAME_STATE_DONE_LOST = 5; // The game is finished, the player lost.
 const GAME_STATE_DONE_WON = 6; // The game is finished, the player won.
+
+class ControlsState {
+    leftPressed = false;
+    leftPressedTicks = 0;
+    rightPressed = false;
+    rightPressedTicks = 0;
+    shovePressed = false;
+    shovePressedTicks = 0;
+    // Rotates are non-repeating, so this only applies to a single tick
+    rotateCw = false;
+    rotateCcw = false;
+}
+
+/**
+ * Translates mouse/touches/keypress events into game actions. 
+ * This exists for several reasons:
+ * 1. The core game logic itself doesn't have to deal with multiple input sources and conflicts
+ *    that can result. For example, it is possible for the player to press the left key while
+ *    pressing the onscreen right button at the same time.
+ * 2. So that multiple events do not get sent within the same "tick" of the game. Like, say,
+ *    spamming the "leftpressed" and "leftreleased" events multiple times in a single tick in
+ *    order to get the active block shoved all the way to the left.
+ * 3. Similar to the first two reasons, this can prevent multiple events from different inputs
+ *    from "stomping" on each other. For example, if the player holds down the left key, then
+ *    presses the left onscreen button and releases it, and then releases the left key,
+ *    there won't be two "left action pressed" and two "left action released" events sent to the
+ *    core game logic. (Would the game consider the left button release after the first "released
+ *    event", or some time later after the second "released event")?
+ */
+class GameControls extends Phaser.Scene {
+
+    controlsEvents = new Phaser.Events.EventEmitter(); // To be overwritten by create.
+    controlsState = new ControlsState(); // To be overwritten by create.
+    rotateCwClearNext = false;
+    rotateCcwClearNext = false;
+
+    constructor(config: Phaser.Types.Scenes.SettingsConfig) {
+        super(config);
+    }
+
+    preload(): void {
+    }
+
+    create(data: GameThingies): void {
+        this.controlsEvents = data.controlsEvents;
+        this.controlsState = data.controlsState;
+        let cevents = this.controlsEvents;
+        if (this.input.keyboard !== null) {
+            let cursors = this.input.keyboard.createCursorKeys();
+            cursors.space.on('down', () => cevents.emit('_internal_rotateccw'), this);
+            cursors.up.on('down', () => cevents.emit('_internal_rotatecw'), this);
+            cursors.left.on('down', () => cevents.emit('_internal_leftpressed'), this);
+            cursors.left.on('up', () => cevents.emit('_internal_leftreleased'), this);
+            cursors.right.on('down', () => cevents.emit('_internal_rightpressed'), this);
+            cursors.right.on('up', () => cevents.emit('_internal_rightreleased'), this);
+            cursors.down.on('down', () => cevents.emit('_internal_shovepressed'), this);
+            cursors.down.on('up', () => cevents.emit('_internal_shovereleased'), this);
+        }
+
+        cevents.on('_internal_leftpressed', this.receivedLeftPressed, this);
+        cevents.on('_internal_leftreleased', this.receivedLeftReleased, this);
+        cevents.on('_internal_rightpressed', this.receivedRightPressed, this);
+        cevents.on('_internal_rightreleased', this.receivedRightReleased, this);
+        cevents.on('_internal_shovepressed', this.receivedShovePressed, this);
+        cevents.on('_internal_shovereleased', this.receivedShoveReleased, this);
+        cevents.on('_internal_rotateccw', this.receivedRotateCcw, this);
+        cevents.on('_internal_rotatecw', this.receivedRotateCw, this);
+    }
+
+    receivedLeftPressed(): void {
+        // NOTE: THIS WON'T DO THE ADVERTIZED LOGIC (but it's a good mvp)
+        this.controlsState.leftPressed = true;
+    }
+
+    receivedLeftReleased(): void {
+        // NOTE: THIS WON'T DO THE ADVERTIZED LOGIC (but it's a good mvp)
+        this.controlsState.leftPressed = false;
+    }
+
+    receivedRightPressed(): void {
+        // NOTE: THIS WON'T DO THE ADVERTIZED LOGIC (but it's a good mvp)
+        this.controlsState.rightPressed = true;
+    }
+
+    receivedRightReleased(): void {
+        // NOTE: THIS WON'T DO THE ADVERTIZED LOGIC (but it's a good mvp)
+        this.controlsState.rightPressed = false;
+    }
+
+    receivedShovePressed(): void {
+        // NOTE: THIS WON'T DO THE ADVERTIZED LOGIC (but it's a good mvp)
+        this.controlsState.shovePressed = true;
+    }
+
+    receivedShoveReleased(): void {
+        // NOTE: THIS WON'T DO THE ADVERTIZED LOGIC (but it's a good mvp)
+        this.controlsState.shovePressed = false;
+    }
+
+    receivedRotateCcw(): void {
+        // NOTE: THIS WON'T DO THE ADVERTIZED LOGIC (but it's a good mvp)
+        this.controlsState.rotateCcw = true;
+        this.rotateCcwClearNext = true;
+        this.controlsEvents.emit('rotateccw');
+    }
+
+    receivedRotateCw(): void {
+        this.controlsState.rotateCw = true;
+        this.rotateCwClearNext = true;
+        this.controlsEvents.emit('rotatecw');
+    }
+
+    update(time: number, delta: number): void {
+        if (this.controlsState.leftPressed) {
+            if (repeaty(this.controlsState.leftPressedTicks, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)) {
+                // then fire event? Dunno.
+            }
+            ++this.controlsState.leftPressedTicks;
+        } else {
+            this.controlsState.leftPressedTicks = 0;
+        }
+        if (this.controlsState.rightPressed) {
+            if (repeaty(this.controlsState.rightPressedTicks, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)) {
+                // then fire event? Dunno.
+            }
+            ++this.controlsState.rightPressedTicks;
+        } else {
+            this.controlsState.rightPressedTicks = 0;
+        }
+        if (this.controlsState.shovePressed) {
+            if (repeaty(this.controlsState.shovePressedTicks, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)) {
+                // then fire event? Dunno.
+            }
+            ++this.controlsState.shovePressedTicks;
+        } else {
+            this.controlsState.shovePressedTicks = 0;
+        }
+        if (this.controlsState.rotateCcw) {
+            // then fire event? Dunno.
+            if (this.rotateCcwClearNext) {
+                this.rotateCcwClearNext = false;
+            } else {
+                this.controlsState.rotateCcw = false; // Effect has no repeats, so it's done
+            }
+        }
+        if (this.controlsState.rotateCcw) {
+            // then fire event? Dunno.
+            if (this.rotateCwClearNext) {
+                this.rotateCwClearNext = false;
+            } else {
+                this.controlsState.rotateCw = false; // Effect has no repeats, so it's done
+            }
+        }
+    }
+}
 
 class SceneTargetTotals extends Phaser.Scene {
 
@@ -274,7 +494,6 @@ class SceneLevelInfo extends Phaser.Scene {
 }
 
 class SceneGrid extends Phaser.Scene {
-    cursors: Phaser.Types.Input.Keyboard.CursorKeys | undefined;
     debugText: Phaser.GameObjects.Text | undefined;
 
     tickDuration = 1000 / 60;
@@ -302,11 +521,6 @@ class SceneGrid extends Phaser.Scene {
 
     gridDisplay: (Phaser.GameObjects.Sprite | null)[] = Array(this.gridRows * this.gridCols);
     cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[] = Array();
-
-    // How many ticks the button for the action has been pressed.
-    ticksPressingShove = 0;
-    ticksPressingLeft = 0;
-    ticksPressingRight = 0;
 
     colToX(col: integer): integer {
         // cols go from left (0) to right (7)
@@ -806,14 +1020,8 @@ class SceneGrid extends Phaser.Scene {
         this.activePosCol = this.startCol;
         this.activeRotation = 0;
 
-        if (this.input.keyboard !== null) {
-            this.cursors = this.input.keyboard.createCursorKeys();
-            this.cursors.space.on('down', this.receivedRotate, this);
-            if (!ENABLE_DEBUG) {
-                this.cursors.up.on('down', this.receivedRotate, this);
-            }
-            this.cursors.shift.on('down', this.receivedSet, this);
-        }
+        this.gameThingies.controlsEvents.on('rotateccw', this.receivedRotate, this);
+        this.gameThingies.controlsEvents.on('rotatecw', this.receivedRotate, this);
     }
 
     preload(): void {
@@ -978,53 +1186,32 @@ class SceneGrid extends Phaser.Scene {
         let changed = false;
         let shouldSettle = false;
 
-        if (this.cursors !== undefined) {
-            if (this.cursors.left.isDown) {
-                // If the active cells can go left, then go.
-                if (repeaty(this.ticksPressingLeft, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)
-                    && this.cellsActiveCanMove(this.activePosRow, this.activePosCol - 1, this.activeRotation)) {
-                    --this.activePosCol;
+        if (this.gameThingies?.controlsState.leftPressed) {
+            // If the active cells can go left, then go.
+            if (repeaty(this.gameThingies?.controlsState.leftPressedTicks, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)
+                && this.cellsActiveCanMove(this.activePosRow, this.activePosCol - 1, this.activeRotation)) {
+                --this.activePosCol;
+                changed = true;
+            }
+        }
+        if (this.gameThingies?.controlsState.rightPressed) {
+            // If the active cells can go right, then go.
+            if (repeaty(this.gameThingies?.controlsState.rightPressedTicks, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)
+                && this.cellsActiveCanMove(this.activePosRow, this.activePosCol + 1, this.activeRotation)) {
+                ++this.activePosCol;
+                changed = true;
+            }
+        }
+        if (this.gameThingies?.controlsState.shovePressed) {
+            // If the active cells can go down, then go.
+            if (repeaty(this.gameThingies?.controlsState.shovePressedTicks, SHOVE_TICKS_REPEAT_DELAY, SHOVE_TICKS_REPEAT_DELAY)) {
+                if (this.cellsActiveCanMove(this.activePosRow - 1, this.activePosCol, this.activeRotation)) {
+                    --this.activePosRow;
                     changed = true;
+                    this.dropCounter = 0;
+                } else {
+                    shouldSettle = true;
                 }
-                ++this.ticksPressingLeft;
-            } else {
-                this.ticksPressingLeft = 0;
-            }
-            if (this.cursors.right.isDown) {
-                // If the active cells can go right, then go.
-                if (repeaty(this.ticksPressingRight, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)
-                    && this.cellsActiveCanMove(this.activePosRow, this.activePosCol + 1, this.activeRotation)) {
-                    ++this.activePosCol;
-                    changed = true;
-                }
-                ++this.ticksPressingRight;
-            } else {
-                this.ticksPressingRight = 0;
-            }
-            if (this.cursors.up.isDown) {
-                if (ENABLE_DEBUG) {
-                    // If the active cells can go up, then go.
-                    // This action is for debug purposes only.
-                    if (this.cellsActiveCanMove(this.activePosRow + 1, this.activePosCol, this.activeRotation)) {
-                        ++this.activePosRow;
-                        changed = true;
-                    }
-                }
-            }
-            if (this.cursors.down.isDown) {
-                // If the active cells can go down, then go.
-                if (repeaty(this.ticksPressingShove, SHOVE_TICKS_REPEAT_DELAY, SHOVE_TICKS_REPEAT_DELAY)) {
-                    if (this.cellsActiveCanMove(this.activePosRow - 1, this.activePosCol, this.activeRotation)) {
-                        --this.activePosRow;
-                        changed = true;
-                        this.dropCounter = 0;
-                    } else {
-                        shouldSettle = true;
-                    }
-                }
-                ++this.ticksPressingShove;
-            } else {
-                this.ticksPressingShove = 0;
             }
         }
 
@@ -1079,12 +1266,14 @@ const GAME = new Phaser.Game(config);
 
 let counter = new TargetTotals();
 let gameSettings: GameSettings = { level: 0, speed: 40 };
-let gameThingies: GameThingies = { gameSettings: gameSettings, targetTotals: counter, boardEvents: new Phaser.Events.EventEmitter() };
+let gameThingies: GameThingies = { gameSettings: gameSettings, targetTotals: counter, controlsState: new ControlsState(), controlsEvents: new Phaser.Events.EventEmitter(), boardEvents: new Phaser.Events.EventEmitter() };
 
 GAME.scene.add('SceneBackground', SceneBackground, true);
 GAME.scene.add('SceneTargetTotals', SceneTargetTotals, true, { targetTotals: counter });
 GAME.scene.add('SceneNextCells', SceneNextCells, true, gameThingies);
 GAME.scene.add('SceneLevelInfo', SceneLevelInfo, true, gameThingies);
+GAME.scene.add('Controls', GameControls, true, gameThingies);
 GAME.scene.add('SceneGrid', SceneGrid, true, gameThingies);
+GAME.scene.add('SceneMultitouch', SceneMultitouch, true, gameThingies);
 GAME.scene.add('SceneLevelClear', SceneLevelClear, false, gameThingies);
 GAME.scene.add('SceneLevelLost', SceneLevelLost, false);
