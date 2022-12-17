@@ -87,8 +87,18 @@ class SceneMultitouch extends Phaser.Scene {
         this.controlsEvents = data.controlsEvents;
         this.input.addPointer(3);
 
-        let left = this.add.sprite(100, 500, 'target').setScale(0.75, 0.75).setTint(CELL_1_COLOR).setAlpha(0.5);
+        let alpha = 0.25;
+
+        let left = this.add.sprite(100, 300, 'target').setScale(0.75, 0.75).setTint(CELL_1_COLOR).setAlpha(0.25);
         this.btns.push(left);
+        let right = this.add.sprite(300, 300, 'target').setScale(0.75, 0.75).setTint(CELL_2_COLOR).setAlpha(0.25);
+        this.btns.push(right);
+        let shove = this.add.sprite(200, 500, 'target').setScale(0.75, 0.75).setTint(0x00ffff).setAlpha(0.25);
+        this.btns.push(shove);
+        let rotateCcw = this.add.sprite(500, 500, 'target').setScale(0.75, 0.75).setTint(CELL_3_COLOR).setAlpha(0.25);
+        this.btns.push(rotateCcw);
+        let rotateCw = this.add.sprite(700, 500, 'target').setScale(0.75, 0.75).setTint(0xffff00).setAlpha(0.25);
+        this.btns.push(rotateCw);
 
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => this.pointer(pointer));
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => this.pointer(pointer));
@@ -100,9 +110,51 @@ class SceneMultitouch extends Phaser.Scene {
             this.controlsEvents.emit('_internal_leftpressed');
         });
         left.on(this.release, (pointer: Phaser.Input.Pointer) => {
-            left.setTint(0xff0000);
+            left.setTint(CELL_1_COLOR);
             console.log(pointer.id + " released");
             this.controlsEvents.emit('_internal_leftreleased');
+        });
+
+        right.on(this.press, (pointer: Phaser.Input.Pointer) => {
+            right.setTint(0xffffff);
+            console.log(pointer.id + " pressing");
+            this.controlsEvents.emit('_internal_rightpressed');
+        });
+        right.on(this.release, (pointer: Phaser.Input.Pointer) => {
+            right.setTint(CELL_2_COLOR);
+            console.log(pointer.id + " released");
+            this.controlsEvents.emit('_internal_rightreleased');
+        });
+
+        shove.on(this.press, (pointer: Phaser.Input.Pointer) => {
+            shove.setTint(0xffffff);
+            console.log(pointer.id + " pressing");
+            this.controlsEvents.emit('_internal_shovepressed');
+        });
+        shove.on(this.release, (pointer: Phaser.Input.Pointer) => {
+            shove.setTint(0x00ffff);
+            console.log(pointer.id + " released");
+            this.controlsEvents.emit('_internal_shovereleased');
+        });
+
+        rotateCcw.on(this.press, (pointer: Phaser.Input.Pointer) => {
+            rotateCcw.setTint(0xffffff);
+            console.log(pointer.id + " pressing");
+            this.controlsEvents.emit('_internal_rotateccw');
+        });
+        rotateCcw.on(this.release, (pointer: Phaser.Input.Pointer) => {
+            rotateCcw.setTint(CELL_3_COLOR);
+            console.log(pointer.id + " released");
+        });
+
+        rotateCw.on(this.press, (pointer: Phaser.Input.Pointer) => {
+            rotateCw.setTint(0xffffff);
+            console.log(pointer.id + " pressing");
+            this.controlsEvents.emit('_internal_rotatecw');
+        });
+        rotateCw.on(this.release, (pointer: Phaser.Input.Pointer) => {
+            rotateCw.setTint(0xffff00);
+            console.log(pointer.id + " released");
         });
     }
 
@@ -963,6 +1015,11 @@ class SceneGrid extends Phaser.Scene {
     }
 
     startup(data: GameThingies): void {
+        if (this.gameThingies?.controlsEvents != data.controlsEvents) {
+            data.controlsEvents.on('rotateccw', this.receivedRotate, this);
+            data.controlsEvents.on('rotatecw', this.receivedRotate, this);
+        }
+
         this.gameThingies = data;
         this.gameState = GAME_STATE_PREGAME;
         this.grid.forEach((item, i, arr) => arr[i] = CELL_EMPTY);
@@ -1019,9 +1076,6 @@ class SceneGrid extends Phaser.Scene {
         this.activePosRow = this.startRow;
         this.activePosCol = this.startCol;
         this.activeRotation = 0;
-
-        this.gameThingies.controlsEvents.on('rotateccw', this.receivedRotate, this);
-        this.gameThingies.controlsEvents.on('rotatecw', this.receivedRotate, this);
     }
 
     preload(): void {
