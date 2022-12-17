@@ -89,15 +89,15 @@ class SceneMultitouch extends Phaser.Scene {
 
         let alpha = 0.25;
 
-        let left = this.add.sprite(100, 300, 'target').setScale(0.75, 0.75).setTint(CELL_1_COLOR).setAlpha(0.25);
+        let left = this.add.sprite(100, 300, 'target').setScale(0.75, 0.75).setTint(CELL_1_COLOR).setAlpha(alpha);
         this.btns.push(left);
-        let right = this.add.sprite(300, 300, 'target').setScale(0.75, 0.75).setTint(CELL_2_COLOR).setAlpha(0.25);
+        let right = this.add.sprite(300, 300, 'target').setScale(0.75, 0.75).setTint(CELL_2_COLOR).setAlpha(alpha);
         this.btns.push(right);
-        let shove = this.add.sprite(200, 500, 'target').setScale(0.75, 0.75).setTint(0x00ffff).setAlpha(0.25);
+        let shove = this.add.sprite(200, 500, 'target').setScale(0.75, 0.75).setTint(0x00ffff).setAlpha(alpha);
         this.btns.push(shove);
-        let rotateCcw = this.add.sprite(500, 500, 'target').setScale(0.75, 0.75).setTint(CELL_3_COLOR).setAlpha(0.25);
+        let rotateCcw = this.add.sprite(500, 500, 'target').setScale(0.75, 0.75).setTint(CELL_3_COLOR).setAlpha(alpha);
         this.btns.push(rotateCcw);
-        let rotateCw = this.add.sprite(700, 500, 'target').setScale(0.75, 0.75).setTint(0xffff00).setAlpha(0.25);
+        let rotateCw = this.add.sprite(700, 500, 'target').setScale(0.75, 0.75).setTint(0xffff00).setAlpha(alpha);
         this.btns.push(rotateCw);
 
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => this.pointer(pointer));
@@ -165,7 +165,7 @@ class SceneMultitouch extends Phaser.Scene {
         this.btns.forEach(btn => {
             let bounds: Phaser.Geom.Rectangle = btn.getBounds();
 
-            if (pointer.leftButtonDown() && bounds.contains(pointer.x, pointer.y)) {
+            if ((pointer.primaryDown || pointer.wasTouch) && bounds.contains(pointer.x, pointer.y)) {
                 if (!btn.getData('pressed')) {
                     btn.setData('pressed', true);
                     btn.emit(this.press, pointer);
