@@ -106,55 +106,45 @@ class SceneMultitouch extends Phaser.Scene {
 
         left.on(this.press, (pointer: Phaser.Input.Pointer) => {
             left.setTint(0xffffff);
-            console.log(pointer.id + " pressing");
             this.controlsEvents.emit('_internal_leftpressed');
         });
         left.on(this.release, (pointer: Phaser.Input.Pointer) => {
             left.setTint(CELL_1_COLOR);
-            console.log(pointer.id + " released");
             this.controlsEvents.emit('_internal_leftreleased');
         });
 
         right.on(this.press, (pointer: Phaser.Input.Pointer) => {
             right.setTint(0xffffff);
-            console.log(pointer.id + " pressing");
             this.controlsEvents.emit('_internal_rightpressed');
         });
         right.on(this.release, (pointer: Phaser.Input.Pointer) => {
             right.setTint(CELL_2_COLOR);
-            console.log(pointer.id + " released");
             this.controlsEvents.emit('_internal_rightreleased');
         });
 
         shove.on(this.press, (pointer: Phaser.Input.Pointer) => {
             shove.setTint(0xffffff);
-            console.log(pointer.id + " pressing");
             this.controlsEvents.emit('_internal_shovepressed');
         });
         shove.on(this.release, (pointer: Phaser.Input.Pointer) => {
             shove.setTint(0x00ffff);
-            console.log(pointer.id + " released");
             this.controlsEvents.emit('_internal_shovereleased');
         });
 
         rotateCcw.on(this.press, (pointer: Phaser.Input.Pointer) => {
             rotateCcw.setTint(0xffffff);
-            console.log(pointer.id + " pressing");
             this.controlsEvents.emit('_internal_rotateccw');
         });
         rotateCcw.on(this.release, (pointer: Phaser.Input.Pointer) => {
             rotateCcw.setTint(CELL_3_COLOR);
-            console.log(pointer.id + " released");
         });
 
         rotateCw.on(this.press, (pointer: Phaser.Input.Pointer) => {
             rotateCw.setTint(0xffffff);
-            console.log(pointer.id + " pressing");
             this.controlsEvents.emit('_internal_rotatecw');
         });
         rotateCw.on(this.release, (pointer: Phaser.Input.Pointer) => {
             rotateCw.setTint(0xffff00);
-            console.log(pointer.id + " released");
         });
     }
 
@@ -165,14 +155,14 @@ class SceneMultitouch extends Phaser.Scene {
         this.btns.forEach(btn => {
             let bounds: Phaser.Geom.Rectangle = btn.getBounds();
 
-            if ((pointer.primaryDown || pointer.wasTouch) && bounds.contains(pointer.x, pointer.y)) {
-                if (!btn.getData('pressed')) {
-                    btn.setData('pressed', true);
+            if (pointer.primaryDown && bounds.contains(pointer.x, pointer.y)) {
+                if (!btn.getData(pointer.identifier.toString())) {
+                    btn.setData(pointer.identifier.toString(), true);
                     btn.emit(this.press, pointer);
                 }
             } else {
-                if (btn.getData('pressed')) {
-                    btn.setData('pressed', false);
+                if (btn.getData(pointer.identifier.toString())) {
+                    btn.setData(pointer.identifier.toString(), false);
                     btn.emit(this.release, pointer);
                 }
             }
