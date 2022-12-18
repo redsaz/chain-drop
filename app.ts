@@ -1122,7 +1122,13 @@ class SceneGrid extends Phaser.Scene {
                     break;
                 }
                 case GAME_STATE_ACTIVE: {
-                    this.activeStateUpdate();
+                    // Some systems may have so much lag that it can't keep up with a full 60 fps,
+                    // and we must process 2 or more ticks in an update (that is, if we expect 60
+                    // fps but are only getting 15, then we're doing 4 loop iterations every
+                    // update to keep the speed correct.) However, we should only read the controls
+                    // on the first iteration of the loop, otherwise it is possible for the active
+                    // cells to shift over more positions than the user wants.
+                    this.activeStateUpdate(i == 0);
                     break;
                 }
                 case GAME_STATE_SETTLE: {
@@ -1179,14 +1185,14 @@ class SceneGrid extends Phaser.Scene {
         }
     }
 
-    activeStateUpdate(): void {
+    activeStateUpdate(shouldReadControls: boolean): void {
 
         ++this.dropCounter;
 
         let changed = false;
         let shouldSettle = false;
 
-        if (this.gameThingies?.controlsState.leftPressed) {
+        if (shouldReadControls && this.gameThingies?.controlsState.leftPressed) {
             // If the active cells can go left, then go.
             if (repeaty(this.gameThingies?.controlsState.leftPressedTicks, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)
                 && this.cellsActiveCanMove(this.activePosRow, this.activePosCol - 1, this.activeRotation)) {
@@ -1194,7 +1200,7 @@ class SceneGrid extends Phaser.Scene {
                 changed = true;
             }
         }
-        if (this.gameThingies?.controlsState.rightPressed) {
+        if (shouldReadControls && this.gameThingies?.controlsState.rightPressed) {
             // If the active cells can go right, then go.
             if (repeaty(this.gameThingies?.controlsState.rightPressedTicks, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)
                 && this.cellsActiveCanMove(this.activePosRow, this.activePosCol + 1, this.activeRotation)) {
@@ -1202,7 +1208,7 @@ class SceneGrid extends Phaser.Scene {
                 changed = true;
             }
         }
-        if (this.gameThingies?.controlsState.shovePressed) {
+        if (shouldReadControls && this.gameThingies?.controlsState.shovePressed) {
             // If the active cells can go down, then go.
             if (repeaty(this.gameThingies?.controlsState.shovePressedTicks, SHOVE_TICKS_REPEAT_DELAY, SHOVE_TICKS_REPEAT_DELAY)) {
                 if (this.cellsActiveCanMove(this.activePosRow - 1, this.activePosCol, this.activeRotation)) {
