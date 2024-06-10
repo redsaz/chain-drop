@@ -1,175 +1,9 @@
-/// <reference path="types/phaser.d.ts"t/>
+/// <reference path="types/phaser.d.ts"/>
 
-class TargetTotals {
-    cell1 = 0;
-    cell2 = 0;
-    cell3 = 0;
-}
-
-interface GameSettings {
-    level: integer;
-    speed: number;
-}
-
-interface GameThingies {
-    gameSettings: GameSettings;
-    targetTotals: TargetTotals;
-    controlsState: ControlsState;
-    controlsEvents: Phaser.Events.EventEmitter;
-    boardEvents: Phaser.Events.EventEmitter;
-}
-
-interface Level {
-    numTargets: integer;
-    highestRow: integer;
-}
-
-const LEVELS: Level[] = [
-    { numTargets: 4, highestRow: 10 },
-    { numTargets: 8, highestRow: 10 },
-    { numTargets: 12, highestRow: 10 },
-    { numTargets: 16, highestRow: 10 },
-    { numTargets: 20, highestRow: 10 },
-    { numTargets: 24, highestRow: 10 },
-    { numTargets: 28, highestRow: 10 },
-    { numTargets: 32, highestRow: 10 },
-    { numTargets: 36, highestRow: 10 },
-    { numTargets: 40, highestRow: 10 },
-    { numTargets: 44, highestRow: 10 },
-    { numTargets: 48, highestRow: 10 },
-    { numTargets: 52, highestRow: 10 },
-    { numTargets: 56, highestRow: 10 },
-    { numTargets: 60, highestRow: 10 },
-    { numTargets: 64, highestRow: 11 },
-    { numTargets: 68, highestRow: 11 },
-    { numTargets: 72, highestRow: 12 },
-    { numTargets: 76, highestRow: 12 },
-    { numTargets: 80, highestRow: 13 },
-    { numTargets: 84, highestRow: 13 },
-];
-
-class SceneBackground extends Phaser.Scene {
-
-    constructor(config: Phaser.Types.Scenes.SettingsConfig) {
-        super(config);
-    }
-
-    preload(): void {
-        this.load.image('background', 'assets/pics/background.jpg');
-    }
-
-    create(): void {
-        this.add.image(400, 300, 'background');
-    }
-
-    update(time: number, delta: number): void {
-    }
-}
-
-class SceneMultitouch extends Phaser.Scene {
-
-    controlsEvents = new Phaser.Events.EventEmitter();
-
-    press = Symbol("press");
-    release = Symbol("release");
-
-    btns: Phaser.GameObjects.Sprite[] = [];
-
-    constructor(config: Phaser.Types.Scenes.SettingsConfig) {
-        super(config);
-    }
-
-    preload(): void {
-        this.load.image('target', 'assets/pics/target.png');
-    }
-
-    create(data: GameThingies): void {
-        this.controlsEvents = data.controlsEvents;
-        this.input.addPointer(3);
-
-        let alpha = 0.25;
-
-        let left = this.add.sprite(100, 300, 'target').setScale(0.75, 0.75).setTint(CELL_1_COLOR).setAlpha(alpha);
-        this.btns.push(left);
-        let right = this.add.sprite(300, 300, 'target').setScale(0.75, 0.75).setTint(CELL_2_COLOR).setAlpha(alpha);
-        this.btns.push(right);
-        let shove = this.add.sprite(200, 500, 'target').setScale(0.75, 0.75).setTint(0x00ffff).setAlpha(alpha);
-        this.btns.push(shove);
-        let rotateCcw = this.add.sprite(500, 500, 'target').setScale(0.75, 0.75).setTint(CELL_3_COLOR).setAlpha(alpha);
-        this.btns.push(rotateCcw);
-        let rotateCw = this.add.sprite(700, 500, 'target').setScale(0.75, 0.75).setTint(0xffff00).setAlpha(alpha);
-        this.btns.push(rotateCw);
-
-        this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => this.pointer(pointer));
-        this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => this.pointer(pointer));
-        this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => this.pointer(pointer));
-
-        left.on(this.press, (pointer: Phaser.Input.Pointer) => {
-            left.setTint(0xffffff);
-            this.controlsEvents.emit('_internal_leftpressed');
-        });
-        left.on(this.release, (pointer: Phaser.Input.Pointer) => {
-            left.setTint(CELL_1_COLOR);
-            this.controlsEvents.emit('_internal_leftreleased');
-        });
-
-        right.on(this.press, (pointer: Phaser.Input.Pointer) => {
-            right.setTint(0xffffff);
-            this.controlsEvents.emit('_internal_rightpressed');
-        });
-        right.on(this.release, (pointer: Phaser.Input.Pointer) => {
-            right.setTint(CELL_2_COLOR);
-            this.controlsEvents.emit('_internal_rightreleased');
-        });
-
-        shove.on(this.press, (pointer: Phaser.Input.Pointer) => {
-            shove.setTint(0xffffff);
-            this.controlsEvents.emit('_internal_shovepressed');
-        });
-        shove.on(this.release, (pointer: Phaser.Input.Pointer) => {
-            shove.setTint(0x00ffff);
-            this.controlsEvents.emit('_internal_shovereleased');
-        });
-
-        rotateCcw.on(this.press, (pointer: Phaser.Input.Pointer) => {
-            rotateCcw.setTint(0xffffff);
-            this.controlsEvents.emit('_internal_rotateccw');
-        });
-        rotateCcw.on(this.release, (pointer: Phaser.Input.Pointer) => {
-            rotateCcw.setTint(CELL_3_COLOR);
-        });
-
-        rotateCw.on(this.press, (pointer: Phaser.Input.Pointer) => {
-            rotateCw.setTint(0xffffff);
-            this.controlsEvents.emit('_internal_rotatecw');
-        });
-        rotateCw.on(this.release, (pointer: Phaser.Input.Pointer) => {
-            rotateCw.setTint(0xffff00);
-        });
-    }
-
-    update(time: number, delta: number): void {
-    }
-
-    pointer(pointer: Phaser.Input.Pointer): void {
-        this.btns.forEach(btn => {
-            let bounds: Phaser.Geom.Rectangle = btn.getBounds();
-
-            if (pointer.primaryDown && bounds.contains(pointer.x, pointer.y)) {
-                if (!btn.getData(pointer.identifier.toString())) {
-                    btn.setData(pointer.identifier.toString(), true);
-                    btn.emit(this.press, pointer);
-                }
-            } else {
-                if (btn.getData(pointer.identifier.toString())) {
-                    btn.setData(pointer.identifier.toString(), false);
-                    btn.emit(this.release, pointer);
-                }
-            }
-        });
-    }
-
-}
+// @Filename: scenes.mts
+import { SceneBackground, SceneMultitouch } from "scenes";
+import * as consts from "consts";
+import { GameThingies, GameSettings, ControlsState, TargetTotals, Level, LEVELS } from "game";
 
 // Displays the menu at the conclusion of a level
 // (like, a button to the next level if won, or a button to retry or go to game menu)
@@ -316,30 +150,14 @@ class SceneLevelLost extends Phaser.Scene {
     }
 }
 
-const CELL_TYPE_MASK = 0b0000_0111;
-const CELL_EMPTY = 0b0000_0000;
-const CELL_JOINED_TOP = 0b0001_0000;
-const CELL_JOINED_RIGHT = 0b0010_0000;
-const CELL_JOINED_BOTTOM = 0b0100_0000;
-const CELL_JOINED_LEFT = 0b1000_0000;
-const CELL_TARGET = 0b0000_1000;
-const CELL_1 = 0b0000_0001;
-const CELL_2 = 0b0000_0010;
-const CELL_3 = 0b0000_0011;
-const CELL_1_COLOR = 0xff0000;
-const CELL_2_COLOR = 0x00ff00;
-const CELL_3_COLOR = 0x4466ff;
-
-const CELL_TYPES = [CELL_1, CELL_2, CELL_3];
-
 function getCellColor(cellValue: integer): integer {
     let color = 0xffffff;
-    if ((CELL_TYPE_MASK & cellValue) == 1) {
-        color = CELL_1_COLOR;
-    } else if ((CELL_TYPE_MASK & cellValue) == 2) {
-        color = CELL_2_COLOR;
-    } else if ((CELL_TYPE_MASK & cellValue) == 3) {
-        color = CELL_3_COLOR;
+    if ((consts.CELL_TYPE_MASK & cellValue) == 1) {
+        color = consts.CELL_1_COLOR;
+    } else if ((consts.CELL_TYPE_MASK & cellValue) == 2) {
+        color = consts.CELL_2_COLOR;
+    } else if ((consts.CELL_TYPE_MASK & cellValue) == 3) {
+        color = consts.CELL_3_COLOR;
     }
     return color;
 }
@@ -354,18 +172,6 @@ const GAME_STATE_ACTIVE = 3; // The player can control the active cells
 const GAME_STATE_SETTLE = 4; // The active cells have been set, and possibly cleared and gravity needs to affect the board.
 const GAME_STATE_DONE_LOST = 5; // The game is finished, the player lost.
 const GAME_STATE_DONE_WON = 6; // The game is finished, the player won.
-
-class ControlsState {
-    leftPressed = false;
-    leftPressedTicks = 0;
-    rightPressed = false;
-    rightPressedTicks = 0;
-    shovePressed = false;
-    shovePressedTicks = 0;
-    // Rotates are non-repeating, so this only applies to a single tick
-    rotateCw = false;
-    rotateCcw = false;
-}
 
 /**
  * Translates mouse/touches/keypress events into game actions. 
@@ -530,9 +336,9 @@ class SceneTargetTotals extends Phaser.Scene {
     create(data: any): void {
         this.targetTotals = data.targetTotals ?? this.targetTotals;
         this.add.rectangle(80, 105, 200, 220, 0, 0.5);
-        let cell1 = this.add.sprite(40, 44, 'target').setScale(0.125, 0.125).setTint(CELL_1_COLOR);
-        let cell2 = this.add.sprite(40, 104, 'target').setScale(0.125, 0.125).setTint(CELL_2_COLOR);
-        let cell3 = this.add.sprite(40, 164, 'target').setScale(0.125, 0.125).setTint(CELL_3_COLOR);
+        let cell1 = this.add.sprite(40, 44, 'target').setScale(0.125, 0.125).setTint(consts.CELL_1_COLOR);
+        let cell2 = this.add.sprite(40, 104, 'target').setScale(0.125, 0.125).setTint(consts.CELL_2_COLOR);
+        let cell3 = this.add.sprite(40, 164, 'target').setScale(0.125, 0.125).setTint(consts.CELL_3_COLOR);
         this.tweens.add({
             targets: [cell1, cell2, cell3],
             angle: 360,
@@ -669,7 +475,7 @@ class SceneGrid extends Phaser.Scene {
         let yPos = this.rowToY(row);
         if (cellValue == 0) {
             return null;
-        } else if ((cellValue & CELL_TARGET) > 0) {
+        } else if ((cellValue & consts.CELL_TARGET) > 0) {
             sprite = this.add.sprite(xPos, yPos, 'target');
             this.tweens.add({
                 targets: sprite,
@@ -677,16 +483,16 @@ class SceneGrid extends Phaser.Scene {
                 repeat: -1,
                 duration: 1000
             })
-        } else if ((cellValue & CELL_JOINED_RIGHT) > 0) {
+        } else if ((cellValue & consts.CELL_JOINED_RIGHT) > 0) {
             sprite = this.add.sprite(xPos, yPos, 'joined');
-        } else if ((cellValue & CELL_JOINED_LEFT) > 0) {
+        } else if ((cellValue & consts.CELL_JOINED_LEFT) > 0) {
             sprite = this.add.sprite(xPos, yPos, 'joined');
             sprite.flipX = true;
-        } else if ((cellValue & CELL_JOINED_TOP) > 0) {
+        } else if ((cellValue & consts.CELL_JOINED_TOP) > 0) {
             sprite = this.add.sprite(xPos, yPos, 'joined');
             sprite.setRotation(Math.PI / 2);
             sprite.flipX = true;
-        } else if ((cellValue & CELL_JOINED_BOTTOM) > 0) {
+        } else if ((cellValue & consts.CELL_JOINED_BOTTOM) > 0) {
             sprite = this.add.sprite(xPos, yPos, 'joined');
             sprite.setRotation(Math.PI / 2);
         } else {
@@ -695,12 +501,12 @@ class SceneGrid extends Phaser.Scene {
         sprite.setScale(0.125, 0.125);
 
         let color = 0xffffff;
-        if ((CELL_TYPE_MASK & cellValue) == 1) {
-            color = CELL_1_COLOR;
-        } else if ((CELL_TYPE_MASK & cellValue) == 2) {
-            color = CELL_2_COLOR;
-        } else if ((CELL_TYPE_MASK & cellValue) == 3) {
-            color = CELL_3_COLOR;
+        if ((consts.CELL_TYPE_MASK & cellValue) == 1) {
+            color = consts.CELL_1_COLOR;
+        } else if ((consts.CELL_TYPE_MASK & cellValue) == 2) {
+            color = consts.CELL_2_COLOR;
+        } else if ((consts.CELL_TYPE_MASK & cellValue) == 3) {
+            color = consts.CELL_3_COLOR;
         }
         sprite.setTint(color);
 
@@ -718,27 +524,27 @@ class SceneGrid extends Phaser.Scene {
         let join2 = 0;
         if (rotation == 0) {
             col += index;
-            join1 = CELL_JOINED_RIGHT;
-            join2 = CELL_JOINED_LEFT;
+            join1 = consts.CELL_JOINED_RIGHT;
+            join2 = consts.CELL_JOINED_LEFT;
         } else if (rotation == 1) {
             // In 1st rotation, first cell is above, second cell is at row and col.
             row += 1 - index;
-            join1 = CELL_JOINED_BOTTOM;
-            join2 = CELL_JOINED_TOP;
+            join1 = consts.CELL_JOINED_BOTTOM;
+            join2 = consts.CELL_JOINED_TOP;
         } else if (rotation == 2) {
             // In 2nd rotation, first cell is to the right, second cell is at row and col.
             col += 1 - index;
-            join1 = CELL_JOINED_LEFT;
-            join2 = CELL_JOINED_RIGHT;
+            join1 = consts.CELL_JOINED_LEFT;
+            join2 = consts.CELL_JOINED_RIGHT;
         } else if (rotation == 3) {
             // In 3rd rotation, first cell is at row and col, second cell is above.
             row += index;
-            join1 = CELL_JOINED_TOP;
-            join2 = CELL_JOINED_BOTTOM;
+            join1 = consts.CELL_JOINED_TOP;
+            join2 = consts.CELL_JOINED_BOTTOM;
         }
 
         // Use the correct join depending on which active cell we're looking at
-        cellValue &= CELL_TYPE_MASK;
+        cellValue &= consts.CELL_TYPE_MASK;
         if (index == 0) {
             cellValue |= join1;
         } else {
@@ -793,12 +599,12 @@ class SceneGrid extends Phaser.Scene {
         let targetIndex = (row + rowChange) * this.gridCols + col + colChange;
         let sourceCell = this.grid[sourceIndex];
         let oldTargetCell = this.grid[targetIndex];
-        if (oldTargetCell != CELL_EMPTY) {
+        if (oldTargetCell != consts.CELL_EMPTY) {
             let sprite = this.gridDisplay[targetIndex];
             sprite?.destroy();
         }
         this.grid[targetIndex] = sourceCell;
-        this.grid[sourceIndex] = CELL_EMPTY;
+        this.grid[sourceIndex] = consts.CELL_EMPTY;
         this.gridDisplay[targetIndex] = this.gridDisplay[sourceIndex];
         this.gridDisplay[sourceIndex] = null;
         this.gridDisplay[targetIndex]?.setPosition(this.colToX(col + colChange), this.rowToY(row + rowChange));
@@ -808,27 +614,27 @@ class SceneGrid extends Phaser.Scene {
     gridDelete(fancy: boolean, row: number, col: number): integer {
         let old = this.gridGet(row, col);
         // If cell is connected above, remove that cell's respective join.
-        if ((old & CELL_JOINED_TOP) != 0) {
-            this.gridSet(row + 1, col, this.gridGet(row + 1, col) & ~CELL_JOINED_BOTTOM);
+        if ((old & consts.CELL_JOINED_TOP) != 0) {
+            this.gridSet(row + 1, col, this.gridGet(row + 1, col) & ~consts.CELL_JOINED_BOTTOM);
         }
         // If cell is connected right, remove that cell's respective join.
-        if ((old & CELL_JOINED_RIGHT) != 0) {
-            this.gridSet(row, col + 1, this.gridGet(row, col + 1) & ~CELL_JOINED_LEFT);
+        if ((old & consts.CELL_JOINED_RIGHT) != 0) {
+            this.gridSet(row, col + 1, this.gridGet(row, col + 1) & ~consts.CELL_JOINED_LEFT);
         }
         // If cell is connected below, remove that cell's respective join.
-        if ((old & CELL_JOINED_BOTTOM) != 0) {
-            this.gridSet(row - 1, col, this.gridGet(row - 1, col) & ~CELL_JOINED_TOP);
+        if ((old & consts.CELL_JOINED_BOTTOM) != 0) {
+            this.gridSet(row - 1, col, this.gridGet(row - 1, col) & ~consts.CELL_JOINED_TOP);
         }
         // If cell is connected left, remove that cell's respective join.
-        if ((old & CELL_JOINED_LEFT) != 0) {
-            this.gridSet(row, col - 1, this.gridGet(row, col - 1) & ~CELL_JOINED_RIGHT);
+        if ((old & consts.CELL_JOINED_LEFT) != 0) {
+            this.gridSet(row, col - 1, this.gridGet(row, col - 1) & ~consts.CELL_JOINED_RIGHT);
         }
 
         // Fancy delete the given cell
         let index = row * this.gridCols + col;
         let oldCell = this.grid[index];
-        if (oldCell != CELL_EMPTY) {
-            this.grid[index] = CELL_EMPTY;
+        if (oldCell != consts.CELL_EMPTY) {
+            this.grid[index] = consts.CELL_EMPTY;
             let sprite = this.gridDisplay[index];
             if (fancy) {
                 this.tweens.add({
@@ -853,7 +659,7 @@ class SceneGrid extends Phaser.Scene {
         super(config ?? { key: 'SceneGrid', active: true });
 
         for (let i = 0; i < this.gridRows * this.gridCols; ++i) {
-            this.grid[i] = CELL_EMPTY;
+            this.grid[i] = consts.CELL_EMPTY;
             this.gridDisplay[i] = null;
         }
     }
@@ -868,15 +674,15 @@ class SceneGrid extends Phaser.Scene {
             legit = legit && (posRow >= 0) && (posRow <= this.gridRows - 1)
                 && (posCol >= 0) && (posCol <= this.gridCols - 2);
             legit = legit
-                && this.grid[(posRow * this.gridCols) + posCol] == CELL_EMPTY
-                && this.grid[(posRow * this.gridCols) + posCol + 1] == CELL_EMPTY;
+                && this.grid[(posRow * this.gridCols) + posCol] == consts.CELL_EMPTY
+                && this.grid[(posRow * this.gridCols) + posCol + 1] == consts.CELL_EMPTY;
         } else {
             // If vertical, check at pos and above.
             legit = legit && (posRow >= 0) && (posRow <= this.gridRows - 2)
                 && (posCol >= 0) && (posCol <= this.gridCols - 1);
             legit = legit
-                && this.grid[(posRow * this.gridCols) + posCol] == CELL_EMPTY
-                && this.grid[((posRow + 1) * this.gridCols) + posCol] == CELL_EMPTY;
+                && this.grid[(posRow * this.gridCols) + posCol] == consts.CELL_EMPTY
+                && this.grid[((posRow + 1) * this.gridCols) + posCol] == consts.CELL_EMPTY;
         }
 
         return legit;
@@ -909,7 +715,7 @@ class SceneGrid extends Phaser.Scene {
             let seriesLength = 0;
             for (let col = 0; col < this.gridCols; ++col) {
                 let cell = this.gridGet(row, col);
-                let currType = cell & CELL_TYPE_MASK;
+                let currType = cell & consts.CELL_TYPE_MASK;
                 if (currType == seriesType) {
                     ++seriesLength;
                 } else {
@@ -943,7 +749,7 @@ class SceneGrid extends Phaser.Scene {
             let seriesLength = 0;
             for (let row = 0; row < this.gridRows; ++row) {
                 let cell = this.gridGet(row, col);
-                let currType = cell & CELL_TYPE_MASK;
+                let currType = cell & consts.CELL_TYPE_MASK;
                 if (currType == seriesType) {
                     ++seriesLength;
                 } else {
@@ -1019,15 +825,15 @@ class SceneGrid extends Phaser.Scene {
                 let cell = this.gridGet(row, col);
 
                 // If the cell is empty, do not drop.
-                nodrop ||= cell == CELL_EMPTY;
+                nodrop ||= cell == consts.CELL_EMPTY;
                 // If the cell is a target, do not drop
-                nodrop ||= (cell & CELL_TARGET) > 0;
+                nodrop ||= (cell & consts.CELL_TARGET) > 0;
                 // If the cell below this cell is occupied, do not drop this cell.
-                nodrop ||= (this.gridGet(row - 1, col) != CELL_EMPTY);
+                nodrop ||= (this.gridGet(row - 1, col) != consts.CELL_EMPTY);
                 // If the cell is joined right, and the cell below that is occupied, don't drop.
-                nodrop ||= ((cell & CELL_JOINED_RIGHT) != 0 && this.gridGet(row - 1, col + 1) != CELL_EMPTY);
+                nodrop ||= ((cell & consts.CELL_JOINED_RIGHT) != 0 && this.gridGet(row - 1, col + 1) != consts.CELL_EMPTY);
                 // If the cell is joined left, and the cell below that is occupied, don't drop.
-                nodrop ||= ((cell & CELL_JOINED_LEFT) != 0 && this.gridGet(row - 1, col - 1) != CELL_EMPTY);
+                nodrop ||= ((cell & consts.CELL_JOINED_LEFT) != 0 && this.gridGet(row - 1, col - 1) != consts.CELL_EMPTY);
 
                 dropline[col] = !nodrop;
             }
@@ -1045,18 +851,18 @@ class SceneGrid extends Phaser.Scene {
     }
 
     sameType(cell: integer, ...cells: integer[]): boolean {
-        return cells.every(c => (c & CELL_TYPE_MASK) == (cell & CELL_TYPE_MASK));
+        return cells.every(c => (c & consts.CELL_TYPE_MASK) == (cell & consts.CELL_TYPE_MASK));
     }
 
     canPlaceTarget(row: number, col: number, cell: integer): boolean {
         // If the placement would collide with a filled cell, then the answer is no.
-        if (this.gridGet(row, col) != CELL_EMPTY) {
+        if (this.gridGet(row, col) != consts.CELL_EMPTY) {
             return false;
         }
 
         // If the placement results in three or more consecutive targets of the same type, then
         // it cannot be placed there.
-        let cellType = cell & CELL_TYPE_MASK;
+        let cellType = cell & consts.CELL_TYPE_MASK;
 
         // If two cells left...
         if (col >= 2 && this.sameType(this.gridGet(row, col - 2), this.gridGet(row, col - 1), cellType)) {
@@ -1099,7 +905,7 @@ class SceneGrid extends Phaser.Scene {
 
         this.gameThingies = data;
         this.gameState = GAME_STATE_PREGAME;
-        this.grid.forEach((item, i, arr) => arr[i] = CELL_EMPTY);
+        this.grid.forEach((item, i, arr) => arr[i] = consts.CELL_EMPTY);
         this.level = data.gameSettings.level ?? 0;
         let level = LEVELS[Math.min(this.level, 20)];
         let numTargets = level.numTargets;
@@ -1107,24 +913,24 @@ class SceneGrid extends Phaser.Scene {
         this.gameThingies.boardEvents.emit('newBoard', this.level);
         this.add.rectangle(128, 272, 256, 544, 0, 0.5);
         this.cellsNext.length = 0;
-        this.cellsNext.push(CELL_TYPES[Math.floor(Math.random() * CELL_TYPES.length)]);
-        this.cellsNext.push(CELL_TYPES[Math.floor(Math.random() * CELL_TYPES.length)]);
+        this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
+        this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
         this.gameThingies.boardEvents.emit('newNext', this.cellsNext[0], this.cellsNext[1]);
         // Add some targets on the board
         let maxRow = level.highestRow;
         for (let i = 0; i < numTargets; ++i) {
             let row = Math.floor(Math.random() * maxRow);
             let col = Math.floor(Math.random() * (this.gridCols));
-            let target = CELL_TYPES[Math.floor(Math.random() * CELL_TYPES.length)] | CELL_TARGET;
+            let target = consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)] | consts.CELL_TARGET;
             let placed = false;
             for (let attempts = 0; attempts < maxRow * this.gridCols; ++attempts) {
                 if (this.canPlaceTarget(row, col, target)) {
                     this.gridSet(row, col, target);
-                    if ((target & CELL_TYPE_MASK) == CELL_1) {
+                    if ((target & consts.CELL_TYPE_MASK) == consts.CELL_1) {
                         ++this.targetTotals.cell1;
-                    } else if ((target & CELL_TYPE_MASK) == CELL_2) {
+                    } else if ((target & consts.CELL_TYPE_MASK) == consts.CELL_2) {
                         ++this.targetTotals.cell2;
-                    } else if ((target & CELL_TYPE_MASK) == CELL_3) {
+                    } else if ((target & consts.CELL_TYPE_MASK) == consts.CELL_3) {
                         ++this.targetTotals.cell3;
                     }
                     break;
@@ -1183,8 +989,8 @@ class SceneGrid extends Phaser.Scene {
                         this.cellsActive.length = 0;
                         this.cellsActive.push(this.cellsNext[0], this.cellsNext[1]);
                         this.cellsNext.length = 0;
-                        this.cellsNext.push(CELL_TYPES[Math.floor(Math.random() * CELL_TYPES.length)]);
-                        this.cellsNext.push(CELL_TYPES[Math.floor(Math.random() * CELL_TYPES.length)]);
+                        this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
+                        this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
                         this.gameThingies?.boardEvents.emit('newNext', this.cellsNext[0], this.cellsNext[1]);
                     }
                     if (this.releaseCounter < 45) {
@@ -1205,7 +1011,7 @@ class SceneGrid extends Phaser.Scene {
                         this.activeRotation = 0;
                         this.cellsActive.forEach((cell, index) => this.cellsActiveDisplay.push(this.cellActiveToScene(this.activePosRow, this.activePosCol, this.activeRotation, index, cell)));
 
-                        if (start1 != CELL_EMPTY || start2 != CELL_EMPTY) {
+                        if (start1 != consts.CELL_EMPTY || start2 != consts.CELL_EMPTY) {
                             this.gameState = GAME_STATE_DONE_LOST;
                         }
                     }
@@ -1230,13 +1036,13 @@ class SceneGrid extends Phaser.Scene {
                             seriesToClear.forEach(series => series.forEach(cell => {
                                 let deleted = this.gridDelete(true, ...cell);
                                 // Decrement the counter corresponding to the target cleared.
-                                if ((deleted & CELL_TARGET) != 0) {
-                                    let deletedType = deleted & CELL_TYPE_MASK;
-                                    if (deletedType == CELL_1) {
+                                if ((deleted & consts.CELL_TARGET) != 0) {
+                                    let deletedType = deleted & consts.CELL_TYPE_MASK;
+                                    if (deletedType == consts.CELL_1) {
                                         --this.targetTotals.cell1;
-                                    } else if (deletedType == CELL_2) {
+                                    } else if (deletedType == consts.CELL_2) {
                                         --this.targetTotals.cell2;
-                                    } else if (deletedType == CELL_3) {
+                                    } else if (deletedType == consts.CELL_3) {
                                         --this.targetTotals.cell3;
                                     }
                                 }
