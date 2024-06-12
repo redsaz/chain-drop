@@ -1,5 +1,5 @@
 import * as consts from "consts";
-import {GameThingies} from "game";
+import { GameThingies, TargetTotals } from "game";
 
 export class SceneBackground extends Phaser.Scene {
 
@@ -268,5 +268,131 @@ export class SceneLevelLost extends Phaser.Scene {
     }
 
     update(time: number, delta: number): void {
+    }
+}
+
+export class SceneTargetTotals extends Phaser.Scene {
+
+    targetTotals = new TargetTotals(); // Will be replaced with instance from create
+    oldTargetTotals = new TargetTotals(); // If different, update text
+    text1: Phaser.GameObjects.Text | undefined;
+    text2: Phaser.GameObjects.Text | undefined;
+    text3: Phaser.GameObjects.Text | undefined;
+
+    constructor(config: Phaser.Types.Scenes.SettingsConfig) {
+        super(config);
+    }
+
+    preload(): void {
+        this.load.image('target', 'assets/pics/target.png');
+        this.cameras.main.setViewport(60, 350, 160, 210);
+    }
+
+    create(data: any): void {
+        this.targetTotals = data.targetTotals ?? this.targetTotals;
+        this.add.rectangle(80, 105, 200, 220, 0, 0.5);
+        let cell1 = this.add.sprite(40, 44, 'target').setScale(0.125, 0.125).setTint(consts.CELL_1_COLOR);
+        let cell2 = this.add.sprite(40, 104, 'target').setScale(0.125, 0.125).setTint(consts.CELL_2_COLOR);
+        let cell3 = this.add.sprite(40, 164, 'target').setScale(0.125, 0.125).setTint(consts.CELL_3_COLOR);
+        this.tweens.add({
+            targets: [cell1, cell2, cell3],
+            angle: 360,
+            repeat: -1,
+            duration: 1000
+        });
+
+        this.text1 = this.add.text(35, 25, '0', { fontSize: '30px', fontFamily: 'Sans-Serif', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 5, align: 'right', fixedWidth: 100 });
+        this.text2 = this.add.text(35, 85, '0', { fontSize: '30px', fontFamily: 'Sans-Serif', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 5, align: 'right', fixedWidth: 100 });
+        this.text3 = this.add.text(35, 145, '0', { fontSize: '30px', fontFamily: 'Sans-Serif', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 5, align: 'right', fixedWidth: 100 });
+    }
+
+    update(time: number, delta: number): void {
+        if (this.oldTargetTotals.cell1 != this.targetTotals.cell1) {
+            this.oldTargetTotals.cell1 = this.targetTotals.cell1;
+            this.text1?.setText(this.targetTotals.cell1.toString());
+        }
+        if (this.oldTargetTotals.cell2 != this.targetTotals.cell2) {
+            this.oldTargetTotals.cell2 = this.targetTotals.cell2;
+            this.text2?.setText(this.targetTotals.cell2.toString());
+        }
+        if (this.oldTargetTotals.cell3 != this.targetTotals.cell3) {
+            this.oldTargetTotals.cell3 = this.targetTotals.cell3;
+            this.text3?.setText(this.targetTotals.cell3.toString());
+        }
+    }
+}
+
+export class SceneNextCells extends Phaser.Scene {
+
+    leftCell: Phaser.GameObjects.Sprite | undefined;
+    rightCell: Phaser.GameObjects.Sprite | undefined;
+
+    constructor(config: Phaser.Types.Scenes.SettingsConfig) {
+        super(config);
+    }
+
+    preload(): void {
+        this.load.image('joined', 'assets/pics/joined.png');
+        this.cameras.main.setViewport(575, 38, 160, 100);
+    }
+
+    create(data: GameThingies): void {
+        this.add.rectangle(0, 0, 320, 200, 0, 0.5);
+        this.add.text(0, 10, 'NEXT', { fontSize: '20px', fontFamily: 'Sans-Serif', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 4, align: 'center', fixedWidth: 160 });
+        this.leftCell = this.add.sprite(64, 64, 'joined');
+        this.leftCell.setScale(0.125, 0.125);
+        this.rightCell = this.add.sprite(96, 64, 'joined');
+        this.rightCell.setScale(0.125, 0.125);
+        this.rightCell.flipX = true;
+
+        data.boardEvents.on('newNext', this.handler, this);
+    }
+
+    update(time: number, delta: number): void {
+    }
+
+    handler(leftCellType: integer, rightCellType: integer): void {
+        this.leftCell?.setTint(this.getCellColor(leftCellType));
+        this.rightCell?.setTint(this.getCellColor(rightCellType));
+    }
+
+    getCellColor(cellValue: integer): integer {
+        let color = 0xffffff;
+        if ((consts.CELL_TYPE_MASK & cellValue) == 1) {
+            color = consts.CELL_1_COLOR;
+        } else if ((consts.CELL_TYPE_MASK & cellValue) == 2) {
+            color = consts.CELL_2_COLOR;
+        } else if ((consts.CELL_TYPE_MASK & cellValue) == 3) {
+            color = consts.CELL_3_COLOR;
+        }
+        return color;
+    }
+}
+
+export class SceneLevelInfo extends Phaser.Scene {
+
+    levelText: Phaser.GameObjects.Text | undefined;
+
+    constructor(config: Phaser.Types.Scenes.SettingsConfig) {
+        super(config);
+    }
+
+    preload(): void {
+        this.cameras.main.setViewport(575, 160, 160, 88);
+    }
+
+    create(data: GameThingies): void {
+        this.add.rectangle(0, 0, 320, 176, 0, 0.5);
+        this.add.text(0, 10, 'LEVEL', { fontSize: '20px', fontFamily: 'Sans-Serif', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 4, align: 'center', fixedWidth: 160 });
+        this.levelText = this.add.text(0, 40, '0', { fontSize: '30px', fontFamily: 'Sans-Serif', fontStyle: 'bold', color: '#fff', stroke: '#000', strokeThickness: 5, align: 'center', fixedWidth: 160 });
+
+        data.boardEvents.on('newBoard', this.handler, this);
+    }
+
+    update(time: number, delta: number): void {
+    }
+
+    handler(level: integer): void {
+        this.levelText?.setText(level.toString());
     }
 }
