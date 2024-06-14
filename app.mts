@@ -4,18 +4,11 @@
 import { SceneBackground, SceneTargetTotals, SceneNextCells, SceneLevelInfo, SceneMultitouch, SceneLevelClear, SceneLevelLost, SceneLevelDoneMenu } from "scenes";
 import * as consts from "consts";
 import { GameThingies, GameSettings, ControlsState, TargetTotals, Level, LEVELS } from "game";
-
+import { GameBoard, GameState } from "gameboard";
 
 const SHIFT_TICKS_REPEAT_DELAY = 15;
 const SHIFT_TICKS_REPEAT_RATE = 6;
 const SHOVE_TICKS_REPEAT_DELAY = 2;
-
-const GAME_STATE_PREGAME = 1; // Game hasn't started yet (counting down, whatever)
-const GAME_STATE_RELEASING = 2; // The active cells are preparing into the grid
-const GAME_STATE_ACTIVE = 3; // The player can control the active cells
-const GAME_STATE_SETTLE = 4; // The active cells have been set, and possibly cleared and gravity needs to affect the board.
-const GAME_STATE_DONE_LOST = 5; // The game is finished, the player lost.
-const GAME_STATE_DONE_WON = 6; // The game is finished, the player won.
 
 /**
  * Translates mouse/touches/keypress events into game actions. 
@@ -162,11 +155,11 @@ class GameControls extends Phaser.Scene {
 
 class SceneGrid extends Phaser.Scene {
     tickDuration = 1000 / 60;
-    ticks: number = 0;
     ticksLeftover: number = 0; // sometimes a little extra or a little less delta is between updates.
 
+    board: GameBoard = new GameBoard();
+
     gameThingies: GameThingies | undefined;
-    gameState = GAME_STATE_PREGAME;
     gridRows = 17;
     gridCols = 8;
     grid: integer[] = Array(this.gridRows * this.gridCols);
@@ -519,7 +512,7 @@ class SceneGrid extends Phaser.Scene {
 
     rotate(amount: integer): void {
         // Can only rotate when active cell is in play
-        if (this.gameState != GAME_STATE_ACTIVE) {
+        if (this.board.gameState != GameState.Active) {
             return;
         }
 
@@ -634,7 +627,7 @@ class SceneGrid extends Phaser.Scene {
         }
 
         this.gameThingies = data;
-        this.gameState = GAME_STATE_PREGAME;
+        this.board.gameState = GameState.Pregame;
         this.grid.forEach((item, i, arr) => arr[i] = consts.CELL_EMPTY);
         this.level = data.gameSettings.level ?? 0;
         let level = LEVELS[Math.min(this.level, 20)];
@@ -706,14 +699,14 @@ class SceneGrid extends Phaser.Scene {
         this.ticksLeftover = ticksAndFraction - ticksToUpdate;
 
         for (let i = 0; i < ticksToUpdate; ++i) {
-            switch (this.gameState) {
-                case GAME_STATE_PREGAME: {
+            switch (this.board.gameState) {
+                case GameState.Pregame: {
                     // This is normally used to set up the board, but it kinda already is,
                     // so we do nothing but start the game... for now.
-                    this.gameState = GAME_STATE_RELEASING;
+                    this.board.gameState = GameState.Releasing;
                     break;
                 }
-                case GAME_STATE_RELEASING: {
+                case GameState.Releasing: {
                     if (this.releaseCounter == 0) {
                         // TODO Find better place for getting next cell colors.
                         this.cellsActive.length = 0;
@@ -733,7 +726,7 @@ class SceneGrid extends Phaser.Scene {
                         let start1 = this.gridGet(this.startRow, this.startCol);
                         let start2 = this.gridGet(this.startRow, this.startCol + 1);
 
-                        this.gameState = GAME_STATE_ACTIVE;
+                        this.board.gameState = GameState.Active;
 
                         // position and display the active cells
                         this.activePosRow = this.startRow;
@@ -742,12 +735,12 @@ class SceneGrid extends Phaser.Scene {
                         this.cellsActive.forEach((cell, index) => this.cellsActiveDisplay.push(this.cellActiveToScene(this.activePosRow, this.activePosCol, this.activeRotation, index, cell)));
 
                         if (start1 != consts.CELL_EMPTY || start2 != consts.CELL_EMPTY) {
-                            this.gameState = GAME_STATE_DONE_LOST;
+                            this.board.gameState = GameState.DoneLost;
                         }
                     }
                     break;
                 }
-                case GAME_STATE_ACTIVE: {
+                case GameState.Active: {
                     // Some systems may have so much lag that it can't keep up with a full 60 fps,
                     // and we must process 2 or more ticks in an update (that is, if we expect 60
                     // fps but are only getting 15, then we're doing 4 loop iterations every
@@ -757,7 +750,7 @@ class SceneGrid extends Phaser.Scene {
                     this.activeStateUpdate(i == 0);
                     break;
                 }
-                case GAME_STATE_SETTLE: {
+                case GameState.Settle: {
                     ++this.settleCounter;
                     if (this.settleCounter % 15 == 0) {
                         if (!this.dropDanglingCells()) {
@@ -780,26 +773,25 @@ class SceneGrid extends Phaser.Scene {
 
                             // If all the targets are gone, then the level is cleared.
                             if (this.targetTotals.cell1 + this.targetTotals.cell2 + this.targetTotals.cell3 < 1) {
-                                this.gameState = GAME_STATE_DONE_WON;
+                                this.board.gameState = GameState.DoneWon;
                             }
 
                             // If nothing was cleared, then release the next active piece.
                             if (seriesToClear.length == 0) {
                                 this.settleCounter = 0;
-                                this.gameState = GAME_STATE_RELEASING;
-                            }
+                                this.board.gameState = GameState.Releasing;                            }
                         }
                     }
                     break;
                 }
-                case GAME_STATE_DONE_LOST: {
+                case GameState.DoneLost: {
                     // TODO: This should not be instant.
-                    if (!this.scene.isActive("SceneLevelLostr")) {
+                    if (!this.scene.isActive("SceneLevelLost")) {
                         this.scene.run("SceneLevelLost")
                     }
                     break;
                 }
-                case GAME_STATE_DONE_WON: {
+                case GameState.DoneWon: {
                     // TODO: This should not be instant.
                     if (!this.scene.isActive("SceneLevelClear")) {
                         this.scene.run("SceneLevelClear")
@@ -810,7 +802,7 @@ class SceneGrid extends Phaser.Scene {
                     break;
                 }
             }
-            ++this.ticks;
+            this.board.update();
         }
     }
 
@@ -862,7 +854,7 @@ class SceneGrid extends Phaser.Scene {
 
         if (shouldSettle) {
             this.activeSet();
-            this.gameState = GAME_STATE_SETTLE;
+            this.board.gameState = GameState.Settle;
             changed = true;
         }
 
