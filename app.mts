@@ -3,8 +3,8 @@
 // @Filename: scenes.mts
 import { SceneBackground, SceneTargetTotals, SceneNextCells, SceneLevelInfo, SceneMultitouch, SceneLevelClear, SceneLevelLost, SceneLevelDoneMenu } from "scenes";
 import * as consts from "consts";
-import { GameThingies, GameSettings, ControlsState, TargetTotals, Level, LEVELS } from "game";
-import { GameBoard, GameState } from "gameboard";
+import { GameThingies, GameSettings, ControlsState, TargetTotals, Level, LEVELS, GameState, SinglePlayerGame } from "game";
+import { GameBoard } from "gameboard";
 
 const SHIFT_TICKS_REPEAT_DELAY = 15;
 const SHIFT_TICKS_REPEAT_RATE = 6;
@@ -156,46 +156,20 @@ class GameControls extends Phaser.Scene {
 class SceneGrid extends Phaser.Scene {
     tickDuration = 1000 / 60;
     ticksLeftover: number = 0; // sometimes a little extra or a little less delta is between updates.
+    gameThingies: GameThingies | undefined;
 
+    gameLogic: SinglePlayerGame = new SinglePlayerGame();
     board: GameBoard = new GameBoard();
 
-    gameThingies: GameThingies | undefined;
-    gridRows = 17;
-    gridCols = 8;
-    grid: integer[] = Array(this.gridRows * this.gridCols);
-    level = 0;
-    startRow = 15;
-    startCol = 3;
-    activePosRow = 0;
-    activePosCol = 0;
-    activeRotation = 0;
-    cellsActive: integer[] = Array();
-    cellsNext: integer[] = Array();
-    dropCounter = 0;
-    dropRate = 40;
-    targetTotals = new TargetTotals(); // a new instance should get passed in with create();
-    releaseCounter = 0;
-    settleCounter = 0;
-
-    gridDisplay: (Phaser.GameObjects.Sprite | null)[] = Array(this.gridRows * this.gridCols);
+    gridDisplay: (Phaser.GameObjects.Sprite | null)[] = Array(this.board.gridRows * this.board.gridCols);
     cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[] = Array();
-
-    colToX(col: integer): integer {
-        // cols go from left (0) to right (7)
-        return col * 32 + 16;
-    }
-
-    rowToY(row: integer): integer {
-        // rows go from bottom (0) to top (15), which is reverse of how pixels are done.
-        return 544 - (row * 32 + 16);
-    }
 
     cellToScene(row: integer, col: integer, cellValue: integer): Phaser.GameObjects.Sprite | null {
         let sprite: Phaser.GameObjects.Sprite;
         // cols go from left (0) to right (7)
-        let xPos = this.colToX(col);
+        let xPos = this.board.colToX(col);
         // rows go from bottom (0) to top (15), which is reverse of how pixels are done.
-        let yPos = this.rowToY(row);
+        let yPos = this.board.rowToY(row);
         if (cellValue == 0) {
             return null;
         } else if ((cellValue & consts.CELL_TARGET) > 0) {
@@ -296,19 +270,19 @@ class SceneGrid extends Phaser.Scene {
             // In 3rd rotation, first cell is at row and col, second cell is above.
             row += index;
         }
-        sprite.setPosition(this.colToX(col), this.rowToY(row) + 4);
+        sprite.setPosition(this.board.colToX(col), this.board.rowToY(row) + 4);
     }
 
     gridGet(row: number, col: number): integer {
-        let index = row * this.gridCols + col;
-        return this.grid[index];
+        let index = row * this.board.gridCols + col;
+        return this.board.grid[index];
     }
 
     gridSet(row: number, col: number, cellValue: integer) {
-        let index = row * this.gridCols + col;
-        let oldCell = this.grid[index];
+        let index = row * this.board.gridCols + col;
+        let oldCell = this.board.grid[index];
         if (oldCell != cellValue) {
-            this.grid[index] = cellValue;
+            this.board.grid[index] = cellValue;
             let sprite = this.gridDisplay[index];
             if (sprite != null) {
                 sprite.destroy();
@@ -318,19 +292,19 @@ class SceneGrid extends Phaser.Scene {
     }
 
     gridMove(row: number, col: number, rowChange: number, colChange: number) {
-        let sourceIndex = row * this.gridCols + col;
-        let targetIndex = (row + rowChange) * this.gridCols + col + colChange;
-        let sourceCell = this.grid[sourceIndex];
-        let oldTargetCell = this.grid[targetIndex];
+        let sourceIndex = row * this.board.gridCols + col;
+        let targetIndex = (row + rowChange) * this.board.gridCols + col + colChange;
+        let sourceCell = this.board.grid[sourceIndex];
+        let oldTargetCell = this.board.grid[targetIndex];
         if (oldTargetCell != consts.CELL_EMPTY) {
             let sprite = this.gridDisplay[targetIndex];
             sprite?.destroy();
         }
-        this.grid[targetIndex] = sourceCell;
-        this.grid[sourceIndex] = consts.CELL_EMPTY;
+        this.board.grid[targetIndex] = sourceCell;
+        this.board.grid[sourceIndex] = consts.CELL_EMPTY;
         this.gridDisplay[targetIndex] = this.gridDisplay[sourceIndex];
         this.gridDisplay[sourceIndex] = null;
-        this.gridDisplay[targetIndex]?.setPosition(this.colToX(col + colChange), this.rowToY(row + rowChange));
+        this.gridDisplay[targetIndex]?.setPosition(this.board.colToX(col + colChange), this.board.rowToY(row + rowChange));
     }
 
     // Deletes the cell at the location, and "unjoins" any cells joined to that cell.
@@ -354,10 +328,10 @@ class SceneGrid extends Phaser.Scene {
         }
 
         // Fancy delete the given cell
-        let index = row * this.gridCols + col;
-        let oldCell = this.grid[index];
+        let index = row * this.board.gridCols + col;
+        let oldCell = this.board.grid[index];
         if (oldCell != consts.CELL_EMPTY) {
-            this.grid[index] = consts.CELL_EMPTY;
+            this.board.grid[index] = consts.CELL_EMPTY;
             let sprite = this.gridDisplay[index];
             if (fancy) {
                 this.tweens.add({
@@ -381,8 +355,8 @@ class SceneGrid extends Phaser.Scene {
     constructor(config?: Phaser.Types.Core.GameConfig) {
         super(config ?? { key: 'SceneGrid', active: true });
 
-        for (let i = 0; i < this.gridRows * this.gridCols; ++i) {
-            this.grid[i] = consts.CELL_EMPTY;
+        for (let i = 0; i < this.board.gridRows * this.board.gridCols; ++i) {
+            this.board.grid[i] = consts.CELL_EMPTY;
             this.gridDisplay[i] = null;
         }
     }
@@ -394,32 +368,32 @@ class SceneGrid extends Phaser.Scene {
 
         // If horizontal, check at pos and to the right.
         if (rotation % 2 == 0) {
-            legit = legit && (posRow >= 0) && (posRow <= this.gridRows - 1)
-                && (posCol >= 0) && (posCol <= this.gridCols - 2);
+            legit = legit && (posRow >= 0) && (posRow <= this.board.gridRows - 1)
+                && (posCol >= 0) && (posCol <= this.board.gridCols - 2);
             legit = legit
-                && this.grid[(posRow * this.gridCols) + posCol] == consts.CELL_EMPTY
-                && this.grid[(posRow * this.gridCols) + posCol + 1] == consts.CELL_EMPTY;
+                && this.board.grid[(posRow * this.board.gridCols) + posCol] == consts.CELL_EMPTY
+                && this.board.grid[(posRow * this.board.gridCols) + posCol + 1] == consts.CELL_EMPTY;
         } else {
             // If vertical, check at pos and above.
-            legit = legit && (posRow >= 0) && (posRow <= this.gridRows - 2)
-                && (posCol >= 0) && (posCol <= this.gridCols - 1);
+            legit = legit && (posRow >= 0) && (posRow <= this.board.gridRows - 2)
+                && (posCol >= 0) && (posCol <= this.board.gridCols - 1);
             legit = legit
-                && this.grid[(posRow * this.gridCols) + posCol] == consts.CELL_EMPTY
-                && this.grid[((posRow + 1) * this.gridCols) + posCol] == consts.CELL_EMPTY;
+                && this.board.grid[(posRow * this.board.gridCols) + posCol] == consts.CELL_EMPTY
+                && this.board.grid[((posRow + 1) * this.board.gridCols) + posCol] == consts.CELL_EMPTY;
         }
 
         return legit;
     }
 
     activeSet(): void {
-        this.cellsActive.forEach((cell, index) => {
-            let abs = this.cellActiveGetPosAbsolute(this.activePosRow, this.activePosCol, this.activeRotation, index, cell);
+        this.gameLogic.cellsActive.forEach((cell, index) => {
+            let abs = this.cellActiveGetPosAbsolute(this.gameLogic.activePosRow, this.gameLogic.activePosCol, this.gameLogic.activeRotation, index, cell);
             this.gridSet(abs[0], abs[1], abs[2]);
         });
 
         // Clear the grid's topmost row of cells, as cells shouldn't be set there
-        for (let col = 0; col < this.gridCols; ++col) {
-            this.gridDelete(false, this.gridRows - 1, col);
+        for (let col = 0; col < this.board.gridCols; ++col) {
+            this.gridDelete(false, this.board.gridRows - 1, col);
         }
 
         // Delete the active sprites
@@ -433,10 +407,10 @@ class SceneGrid extends Phaser.Scene {
     getCellsToClear(): [integer, integer][][] {
         let setsToClear: [integer, integer][][] = [];
         // Find any horizontal clears
-        for (let row = 0; row < this.gridRows; ++row) {
+        for (let row = 0; row < this.board.gridRows; ++row) {
             let seriesType = 0;
             let seriesLength = 0;
-            for (let col = 0; col < this.gridCols; ++col) {
+            for (let col = 0; col < this.board.gridCols; ++col) {
                 let cell = this.gridGet(row, col);
                 let currType = cell & consts.CELL_TYPE_MASK;
                 if (currType == seriesType) {
@@ -459,7 +433,7 @@ class SceneGrid extends Phaser.Scene {
             // If series is long enough, add cols to clear
             if (seriesType != 0 && seriesLength >= 4) {
                 let cellsToClear: [integer, integer][] = [];
-                for (let i = this.gridCols - seriesLength; i < this.gridCols; ++i) {
+                for (let i = this.board.gridCols - seriesLength; i < this.board.gridCols; ++i) {
                     cellsToClear.push([row, i]);
                 }
                 setsToClear.push(cellsToClear);
@@ -467,10 +441,10 @@ class SceneGrid extends Phaser.Scene {
         }
 
         // Find any vertical clears
-        for (let col = 0; col < this.gridCols; ++col) {
+        for (let col = 0; col < this.board.gridCols; ++col) {
             let seriesType = 0;
             let seriesLength = 0;
-            for (let row = 0; row < this.gridRows; ++row) {
+            for (let row = 0; row < this.board.gridRows; ++row) {
                 let cell = this.gridGet(row, col);
                 let currType = cell & consts.CELL_TYPE_MASK;
                 if (currType == seriesType) {
@@ -493,7 +467,7 @@ class SceneGrid extends Phaser.Scene {
             // If series is long enough, add rows to clear
             if (seriesType != 0 && seriesLength >= 4) {
                 let cellsToClear: [integer, integer][] = [];
-                for (let i = this.gridRows - seriesLength; i < this.gridRows; ++i) {
+                for (let i = this.board.gridRows - seriesLength; i < this.board.gridRows; ++i) {
                     cellsToClear.push([i, col]);
                 }
                 setsToClear.push(cellsToClear);
@@ -512,38 +486,38 @@ class SceneGrid extends Phaser.Scene {
 
     rotate(amount: integer): void {
         // Can only rotate when active cell is in play
-        if (this.board.gameState != GameState.Active) {
+        if (this.gameLogic.gameState != GameState.Active) {
             return;
         }
 
         // If the proposed rotation will not clobber a filled cell, then allow it, but if rotating
         // from a vertical position to a horizontal one and it would clobber a filled cell,
         // try kicking left one col. If no clobbers, then go with that.
-        let rotation = 3 - ((3 - ((this.activeRotation + amount) % 4)) % 4)
-        let posCol = this.activePosCol;
-        if (!this.cellsActiveCanMove(this.activePosRow, posCol, rotation) && (rotation % 2) == 0) {
+        let rotation = 3 - ((3 - ((this.gameLogic.activeRotation + amount) % 4)) % 4)
+        let posCol = this.gameLogic.activePosCol;
+        if (!this.cellsActiveCanMove(this.gameLogic.activePosRow, posCol, rotation) && (rotation % 2) == 0) {
             --posCol;
         }
-        if (this.cellsActiveCanMove(this.activePosRow, posCol, rotation)) {
-            this.activeRotation = rotation;
-            this.activePosCol = posCol;
+        if (this.cellsActiveCanMove(this.gameLogic.activePosRow, posCol, rotation)) {
+            this.gameLogic.activeRotation = rotation;
+            this.gameLogic.activePosCol = posCol;
 
             // Update display
             // Delete the current sprites then create new ones at correct position
             while (this.cellsActiveDisplay.length) {
                 this.cellsActiveDisplay.shift()?.destroy();
             }
-            this.cellsActive.forEach((cell, index) => this.cellsActiveDisplay.push(this.cellActiveToScene(this.activePosRow, this.activePosCol, this.activeRotation, index, cell)));
+            this.gameLogic.cellsActive.forEach((cell, index) => this.cellsActiveDisplay.push(this.cellActiveToScene(this.gameLogic.activePosRow, this.gameLogic.activePosCol, this.gameLogic.activeRotation, index, cell)));
         }
     }
 
     // Drop (by one) all cells that are not settled.
     dropDanglingCells(): boolean {
         let dropped = false; // if at least one cell dropped by gravity, the function will need to run again.
-        let dropline = new Array<boolean>(this.gridCols); // Calculate drops for an entire line before dropping.
+        let dropline = new Array<boolean>(this.board.gridCols); // Calculate drops for an entire line before dropping.
         // Work from the bottom up (well, not the bottom-most row though)
-        for (let row = 1; row < this.gridRows; ++row) {
-            for (let col = 0; col < this.gridCols; ++col) {
+        for (let row = 1; row < this.board.gridRows; ++row) {
+            for (let col = 0; col < this.board.gridCols; ++col) {
                 let nodrop = false; // If nodrop is true, do not drop the cell.
                 let cell = this.gridGet(row, col);
 
@@ -561,7 +535,7 @@ class SceneGrid extends Phaser.Scene {
                 dropline[col] = !nodrop;
             }
             // Now that each column has been calculated to drop or not, drop the correct parts of the line
-            for (let col = 0; col < this.gridCols; ++col) {
+            for (let col = 0; col < this.board.gridCols; ++col) {
                 let shouldDrop = dropline[col];
                 dropped ||= shouldDrop;
                 if (shouldDrop) {
@@ -593,12 +567,12 @@ class SceneGrid extends Phaser.Scene {
         }
 
         // If one cell left and one cell right...
-        if (col >= 1 && col <= this.gridCols - 2 && this.sameType(this.gridGet(row, col - 1), cellType, this.gridGet(row, col + 1))) {
+        if (col >= 1 && col <= this.board.gridCols - 2 && this.sameType(this.gridGet(row, col - 1), cellType, this.gridGet(row, col + 1))) {
             return false;
         }
 
         // If two cells right...
-        if (col <= this.gridCols - 3 && this.sameType(cellType, this.gridGet(row, col + 1), this.gridGet(row, col + 2))) {
+        if (col <= this.board.gridCols - 3 && this.sameType(cellType, this.gridGet(row, col + 1), this.gridGet(row, col + 2))) {
             return false;
         }
 
@@ -608,12 +582,12 @@ class SceneGrid extends Phaser.Scene {
         }
 
         // If one cell below and one cell above...
-        if (row >= 1 && col <= this.gridRows - 2 && this.sameType(this.gridGet(row - 1, col), cellType, this.gridGet(row + 1, col))) {
+        if (row >= 1 && col <= this.board.gridRows - 2 && this.sameType(this.gridGet(row - 1, col), cellType, this.gridGet(row + 1, col))) {
             return false;
         }
 
         // If two cells above...
-        if (row <= this.gridRows - 3 && this.sameType(cellType, this.gridGet(row + 1, col), this.gridGet(row + 2, col))) {
+        if (row <= this.board.gridRows - 3 && this.sameType(cellType, this.gridGet(row + 1, col), this.gridGet(row + 2, col))) {
             return false;
         }
 
@@ -627,39 +601,39 @@ class SceneGrid extends Phaser.Scene {
         }
 
         this.gameThingies = data;
-        this.board.gameState = GameState.Pregame;
-        this.grid.forEach((item, i, arr) => arr[i] = consts.CELL_EMPTY);
-        this.level = data.gameSettings.level ?? 0;
-        let level = LEVELS[Math.min(this.level, 20)];
+        this.gameLogic.gameState = GameState.Pregame;
+        this.board.grid.forEach((item, i, arr) => arr[i] = consts.CELL_EMPTY);
+        this.gameLogic.level = data.gameSettings.level ?? 0;
+        let level = LEVELS[Math.min(this.gameLogic.level, 20)];
         let numTargets = level.numTargets;
-        this.targetTotals = data.targetTotals ?? this.targetTotals;
-        this.gameThingies.boardEvents.emit('newBoard', this.level);
+        this.gameLogic.targetTotals = data.targetTotals ?? this.gameLogic.targetTotals;
+        this.gameThingies.boardEvents.emit('newBoard', this.gameLogic.level);
         this.add.rectangle(128, 272, 256, 544, 0, 0.5);
-        this.cellsNext.length = 0;
-        this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
-        this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
-        this.gameThingies.boardEvents.emit('newNext', this.cellsNext[0], this.cellsNext[1]);
+        this.gameLogic.cellsNext.length = 0;
+        this.gameLogic.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
+        this.gameLogic.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
+        this.gameThingies.boardEvents.emit('newNext', this.gameLogic.cellsNext[0], this.gameLogic.cellsNext[1]);
         // Add some targets on the board
         let maxRow = level.highestRow;
         for (let i = 0; i < numTargets; ++i) {
             let row = Math.floor(Math.random() * maxRow);
-            let col = Math.floor(Math.random() * (this.gridCols));
+            let col = Math.floor(Math.random() * (this.board.gridCols));
             let target = consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)] | consts.CELL_TARGET;
             let placed = false;
-            for (let attempts = 0; attempts < maxRow * this.gridCols; ++attempts) {
+            for (let attempts = 0; attempts < maxRow * this.board.gridCols; ++attempts) {
                 if (this.canPlaceTarget(row, col, target)) {
                     this.gridSet(row, col, target);
                     if ((target & consts.CELL_TYPE_MASK) == consts.CELL_1) {
-                        ++this.targetTotals.cell1;
+                        ++this.gameLogic.targetTotals.cell1;
                     } else if ((target & consts.CELL_TYPE_MASK) == consts.CELL_2) {
-                        ++this.targetTotals.cell2;
+                        ++this.gameLogic.targetTotals.cell2;
                     } else if ((target & consts.CELL_TYPE_MASK) == consts.CELL_3) {
-                        ++this.targetTotals.cell3;
+                        ++this.gameLogic.targetTotals.cell3;
                     }
                     break;
                 }
                 ++col;
-                if (col >= this.gridCols) {
+                if (col >= this.board.gridCols) {
                     col = 0;
                     --row;
                     if (row < 0) {
@@ -670,9 +644,9 @@ class SceneGrid extends Phaser.Scene {
         }
 
         // Init the active cells
-        this.activePosRow = this.startRow;
-        this.activePosCol = this.startCol;
-        this.activeRotation = 0;
+        this.gameLogic.activePosRow = this.gameLogic.startRow;
+        this.gameLogic.activePosCol = this.gameLogic.startCol;
+        this.gameLogic.activeRotation = 0;
     }
 
     preload(): void {
@@ -699,43 +673,43 @@ class SceneGrid extends Phaser.Scene {
         this.ticksLeftover = ticksAndFraction - ticksToUpdate;
 
         for (let i = 0; i < ticksToUpdate; ++i) {
-            switch (this.board.gameState) {
+            switch (this.gameLogic.gameState) {
                 case GameState.Pregame: {
                     // This is normally used to set up the board, but it kinda already is,
                     // so we do nothing but start the game... for now.
-                    this.board.gameState = GameState.Releasing;
+                    this.gameLogic.gameState = GameState.Releasing;
                     break;
                 }
                 case GameState.Releasing: {
-                    if (this.releaseCounter == 0) {
+                    if (this.gameLogic.releaseCounter == 0) {
                         // TODO Find better place for getting next cell colors.
-                        this.cellsActive.length = 0;
-                        this.cellsActive.push(this.cellsNext[0], this.cellsNext[1]);
-                        this.cellsNext.length = 0;
-                        this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
-                        this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
-                        this.gameThingies?.boardEvents.emit('newNext', this.cellsNext[0], this.cellsNext[1]);
+                        this.gameLogic.cellsActive.length = 0;
+                        this.gameLogic.cellsActive.push(this.gameLogic.cellsNext[0], this.gameLogic.cellsNext[1]);
+                        this.gameLogic.cellsNext.length = 0;
+                        this.gameLogic.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
+                        this.gameLogic.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
+                        this.gameThingies?.boardEvents.emit('newNext', this.gameLogic.cellsNext[0], this.gameLogic.cellsNext[1]);
                     }
-                    if (this.releaseCounter < 45) {
-                        ++this.releaseCounter;
+                    if (this.gameLogic.releaseCounter < 45) {
+                        ++this.gameLogic.releaseCounter;
                     } else {
-                        this.releaseCounter = 0;
+                        this.gameLogic.releaseCounter = 0;
 
                         // If any of the cells where the active cells are placed is filled, then game over.
                         // (still place the active cells anyway, to show why)
-                        let start1 = this.gridGet(this.startRow, this.startCol);
-                        let start2 = this.gridGet(this.startRow, this.startCol + 1);
+                        let start1 = this.gridGet(this.gameLogic.startRow, this.gameLogic.startCol);
+                        let start2 = this.gridGet(this.gameLogic.startRow, this.gameLogic.startCol + 1);
 
-                        this.board.gameState = GameState.Active;
+                        this.gameLogic.gameState = GameState.Active;
 
                         // position and display the active cells
-                        this.activePosRow = this.startRow;
-                        this.activePosCol = this.startCol;
-                        this.activeRotation = 0;
-                        this.cellsActive.forEach((cell, index) => this.cellsActiveDisplay.push(this.cellActiveToScene(this.activePosRow, this.activePosCol, this.activeRotation, index, cell)));
+                        this.gameLogic.activePosRow = this.gameLogic.startRow;
+                        this.gameLogic.activePosCol = this.gameLogic.startCol;
+                        this.gameLogic.activeRotation = 0;
+                        this.gameLogic.cellsActive.forEach((cell, index) => this.cellsActiveDisplay.push(this.cellActiveToScene(this.gameLogic.activePosRow, this.gameLogic.activePosCol, this.gameLogic.activeRotation, index, cell)));
 
                         if (start1 != consts.CELL_EMPTY || start2 != consts.CELL_EMPTY) {
-                            this.board.gameState = GameState.DoneLost;
+                            this.gameLogic.gameState = GameState.DoneLost;
                         }
                     }
                     break;
@@ -751,8 +725,8 @@ class SceneGrid extends Phaser.Scene {
                     break;
                 }
                 case GameState.Settle: {
-                    ++this.settleCounter;
-                    if (this.settleCounter % 15 == 0) {
+                    ++this.gameLogic.settleCounter;
+                    if (this.gameLogic.settleCounter % 15 == 0) {
                         if (!this.dropDanglingCells()) {
                             // TODO: This should not be instant.
                             let seriesToClear = this.getCellsToClear();
@@ -762,24 +736,25 @@ class SceneGrid extends Phaser.Scene {
                                 if ((deleted & consts.CELL_TARGET) != 0) {
                                     let deletedType = deleted & consts.CELL_TYPE_MASK;
                                     if (deletedType == consts.CELL_1) {
-                                        --this.targetTotals.cell1;
+                                        --this.gameLogic.targetTotals.cell1;
                                     } else if (deletedType == consts.CELL_2) {
-                                        --this.targetTotals.cell2;
+                                        --this.gameLogic.targetTotals.cell2;
                                     } else if (deletedType == consts.CELL_3) {
-                                        --this.targetTotals.cell3;
+                                        --this.gameLogic.targetTotals.cell3;
                                     }
                                 }
                             }));
 
                             // If all the targets are gone, then the level is cleared.
-                            if (this.targetTotals.cell1 + this.targetTotals.cell2 + this.targetTotals.cell3 < 1) {
-                                this.board.gameState = GameState.DoneWon;
+                            if (this.gameLogic.targetTotals.cell1 + this.gameLogic.targetTotals.cell2 + this.gameLogic.targetTotals.cell3 < 1) {
+                                this.gameLogic.gameState = GameState.DoneWon;
                             }
 
                             // If nothing was cleared, then release the next active piece.
                             if (seriesToClear.length == 0) {
-                                this.settleCounter = 0;
-                                this.board.gameState = GameState.Releasing;                            }
+                                this.gameLogic.settleCounter = 0;
+                                this.gameLogic.gameState = GameState.Releasing;
+                            }
                         }
                     }
                     break;
@@ -802,13 +777,13 @@ class SceneGrid extends Phaser.Scene {
                     break;
                 }
             }
-            this.board.update();
+            this.gameLogic.update();
         }
     }
 
     activeStateUpdate(shouldReadControls: boolean): void {
 
-        ++this.dropCounter;
+        ++this.gameLogic.dropCounter;
 
         let changed = false;
         let shouldSettle = false;
@@ -816,36 +791,36 @@ class SceneGrid extends Phaser.Scene {
         if (shouldReadControls && this.gameThingies?.controlsState.leftPressed) {
             // If the active cells can go left, then go.
             if (repeaty(this.gameThingies?.controlsState.leftPressedTicks, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)
-                && this.cellsActiveCanMove(this.activePosRow, this.activePosCol - 1, this.activeRotation)) {
-                --this.activePosCol;
+                && this.cellsActiveCanMove(this.gameLogic.activePosRow, this.gameLogic.activePosCol - 1, this.gameLogic.activeRotation)) {
+                --this.gameLogic.activePosCol;
                 changed = true;
             }
         }
         if (shouldReadControls && this.gameThingies?.controlsState.rightPressed) {
             // If the active cells can go right, then go.
             if (repeaty(this.gameThingies?.controlsState.rightPressedTicks, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)
-                && this.cellsActiveCanMove(this.activePosRow, this.activePosCol + 1, this.activeRotation)) {
-                ++this.activePosCol;
+                && this.cellsActiveCanMove(this.gameLogic.activePosRow, this.gameLogic.activePosCol + 1, this.gameLogic.activeRotation)) {
+                ++this.gameLogic.activePosCol;
                 changed = true;
             }
         }
         if (shouldReadControls && this.gameThingies?.controlsState.shovePressed) {
             // If the active cells can go down, then go.
             if (repeaty(this.gameThingies?.controlsState.shovePressedTicks, SHOVE_TICKS_REPEAT_DELAY, SHOVE_TICKS_REPEAT_DELAY)) {
-                if (this.cellsActiveCanMove(this.activePosRow - 1, this.activePosCol, this.activeRotation)) {
-                    --this.activePosRow;
+                if (this.cellsActiveCanMove(this.gameLogic.activePosRow - 1, this.gameLogic.activePosCol, this.gameLogic.activeRotation)) {
+                    --this.gameLogic.activePosRow;
                     changed = true;
-                    this.dropCounter = 0;
+                    this.gameLogic.dropCounter = 0;
                 } else {
                     shouldSettle = true;
                 }
             }
         }
 
-        if (this.dropCounter >= this.dropRate) {
-            this.dropCounter = 0;
-            if (this.cellsActiveCanMove(this.activePosRow - 1, this.activePosCol, this.activeRotation)) {
-                --this.activePosRow;
+        if (this.gameLogic.dropCounter >= this.gameLogic.dropRate) {
+            this.gameLogic.dropCounter = 0;
+            if (this.cellsActiveCanMove(this.gameLogic.activePosRow - 1, this.gameLogic.activePosCol, this.gameLogic.activeRotation)) {
+                --this.gameLogic.activePosRow;
             } else {
                 shouldSettle = true;
             }
@@ -854,14 +829,14 @@ class SceneGrid extends Phaser.Scene {
 
         if (shouldSettle) {
             this.activeSet();
-            this.board.gameState = GameState.Settle;
+            this.gameLogic.gameState = GameState.Settle;
             changed = true;
         }
 
         // Update the positions of the active cells if anything changed
         if (changed) {
             this.cellsActiveDisplay.forEach((sprite: Phaser.GameObjects.Sprite | null, index) =>
-                this.cellActiveUpdatePos(this.activePosRow, this.activePosCol, this.activeRotation, index, sprite));
+                this.cellActiveUpdatePos(this.gameLogic.activePosRow, this.gameLogic.activePosCol, this.gameLogic.activeRotation, index, sprite));
         }
     }
 }

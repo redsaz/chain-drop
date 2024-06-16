@@ -1,13 +1,3 @@
-export enum GameState {
-    Pregame = 1, // Game hasn't started yet (counting down, whatever)
-    Releasing, // The active cells are preparing into the grid
-    Active, // The player can control the active cells
-    Settle, // The active cells have been set, and possibly cleared and gravity needs to affect the board.
-    DoneLost, // The game is finished, the player lost.
-    DoneWon, // The game is finished, the player won.
-}
-
-
 /**
  * Contains the actual game logic and state.
  * 
@@ -20,11 +10,18 @@ export enum GameState {
  * querying the game status.
  */
 export class GameBoard {
-    tick: number = 0; // The current logical "frame" the game is at (not graphical frame)
-    // TODO: Make gameState be private #gameState and handle state logic within.
-    gameState: GameState = GameState.Pregame;
+    gridRows = 17;
+    gridCols = 8;
+    grid: integer[] = Array(this.gridRows * this.gridCols);
 
-    update() {
-        ++this.tick;
+    colToX(col: integer): integer {
+        // cols go from left (0) to right (7)
+        return col * 32 + 16;
     }
+
+    rowToY(row: integer): integer {
+        // rows go from bottom (0) to top (15), which is reverse of how pixels are done.
+        return 544 - (row * 32 + 16);
+    }
+
 }
