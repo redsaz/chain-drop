@@ -1,3 +1,5 @@
+import * as consts from "consts";
+
 /**
  * Contains the actual game logic and state.
  * 
@@ -14,14 +16,33 @@ export class GameBoard {
     gridCols = 8;
     grid: integer[] = Array(this.gridRows * this.gridCols);
 
-    colToX(col: integer): integer {
-        // cols go from left (0) to right (7)
-        return col * 32 + 16;
+    gridIndex(row: number, col: number): number {
+        return row * this.gridCols + col;
     }
 
-    rowToY(row: integer): integer {
-        // rows go from bottom (0) to top (15), which is reverse of how pixels are done.
-        return 544 - (row * 32 + 16);
+    gridGet(row: number, col: number): integer {
+        return this.grid[this.gridIndex(row, col)];
+    }
+
+    gridSet(row: number, col: number, cellValue: integer): integer {
+        let index = this.gridIndex(row, col);
+        let oldCell = this.grid[index];
+        if (oldCell != cellValue) {
+            this.grid[index] = cellValue;
+        }
+
+        return oldCell;
+    }
+
+    gridMove(row: number, col: number, rowChange: number, colChange: number): integer {
+        let sourceIndex = this.gridIndex(row, col);
+        let targetIndex = this.gridIndex(row + rowChange, col + colChange);
+        let sourceCell = this.grid[sourceIndex];
+        let oldTargetCell = this.grid[targetIndex];
+        this.grid[targetIndex] = sourceCell;
+        this.grid[sourceIndex] = consts.CELL_EMPTY;
+
+        return oldTargetCell;
     }
 
 }

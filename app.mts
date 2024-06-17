@@ -167,9 +167,9 @@ class SceneGrid extends Phaser.Scene {
     cellToScene(row: integer, col: integer, cellValue: integer): Phaser.GameObjects.Sprite | null {
         let sprite: Phaser.GameObjects.Sprite;
         // cols go from left (0) to right (7)
-        let xPos = this.board.colToX(col);
+        let xPos = this.colToX(col);
         // rows go from bottom (0) to top (15), which is reverse of how pixels are done.
-        let yPos = this.board.rowToY(row);
+        let yPos = this.rowToY(row);
         if (cellValue == 0) {
             return null;
         } else if ((cellValue & consts.CELL_TARGET) > 0) {
@@ -270,19 +270,27 @@ class SceneGrid extends Phaser.Scene {
             // In 3rd rotation, first cell is at row and col, second cell is above.
             row += index;
         }
-        sprite.setPosition(this.board.colToX(col), this.board.rowToY(row) + 4);
+        sprite.setPosition(this.colToX(col), this.rowToY(row) + 4);
+    }
+
+    colToX(col: integer): integer {
+        // cols go from left (0) to right (7)
+        return col * 32 + 16;
+    }
+
+    rowToY(row: integer): integer {
+        // rows go from bottom (0) to top (15), which is reverse of how pixels are done.
+        return 544 - (row * 32 + 16);
     }
 
     gridGet(row: number, col: number): integer {
-        let index = row * this.board.gridCols + col;
-        return this.board.grid[index];
+        return this.board.gridGet(row, col);
     }
 
     gridSet(row: number, col: number, cellValue: integer) {
+        let oldCell = this.board.gridSet(row, col, cellValue);
         let index = row * this.board.gridCols + col;
-        let oldCell = this.board.grid[index];
         if (oldCell != cellValue) {
-            this.board.grid[index] = cellValue;
             let sprite = this.gridDisplay[index];
             if (sprite != null) {
                 sprite.destroy();
@@ -292,19 +300,16 @@ class SceneGrid extends Phaser.Scene {
     }
 
     gridMove(row: number, col: number, rowChange: number, colChange: number) {
-        let sourceIndex = row * this.board.gridCols + col;
-        let targetIndex = (row + rowChange) * this.board.gridCols + col + colChange;
-        let sourceCell = this.board.grid[sourceIndex];
-        let oldTargetCell = this.board.grid[targetIndex];
+        let oldTargetCell = this.board.gridMove(row, col, rowChange, colChange);
+        let sourceIndex = this.board.gridIndex(row, col);
+        let targetIndex = this.board.gridIndex(row + rowChange, col + colChange);
         if (oldTargetCell != consts.CELL_EMPTY) {
             let sprite = this.gridDisplay[targetIndex];
             sprite?.destroy();
         }
-        this.board.grid[targetIndex] = sourceCell;
-        this.board.grid[sourceIndex] = consts.CELL_EMPTY;
         this.gridDisplay[targetIndex] = this.gridDisplay[sourceIndex];
         this.gridDisplay[sourceIndex] = null;
-        this.gridDisplay[targetIndex]?.setPosition(this.board.colToX(col + colChange), this.board.rowToY(row + rowChange));
+        this.gridDisplay[targetIndex]?.setPosition(this.colToX(col + colChange), this.rowToY(row + rowChange));
     }
 
     // Deletes the cell at the location, and "unjoins" any cells joined to that cell.
@@ -328,7 +333,7 @@ class SceneGrid extends Phaser.Scene {
         }
 
         // Fancy delete the given cell
-        let index = row * this.board.gridCols + col;
+        let index = this.board.gridIndex(row, col);
         let oldCell = this.board.grid[index];
         if (oldCell != consts.CELL_EMPTY) {
             this.board.grid[index] = consts.CELL_EMPTY;
