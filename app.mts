@@ -3,12 +3,8 @@
 // @Filename: scenes.mts
 import { SceneBackground, SceneTargetTotals, SceneNextCells, SceneLevelInfo, SceneMultitouch, SceneLevelClear, SceneLevelLost, SceneLevelDoneMenu } from "scenes";
 import * as consts from "consts";
-import { GameThingies, GameSettings, ControlsState, TargetTotals, Level, LEVELS, GameState, SinglePlayerGame } from "game";
-import { GameBoard } from "gameboard";
-
-const SHIFT_TICKS_REPEAT_DELAY = 15;
-const SHIFT_TICKS_REPEAT_RATE = 6;
-const SHOVE_TICKS_REPEAT_DELAY = 2;
+import { GameThingies, GameSettings, ControlsState, TargetTotals, SceneStuff, LEVELS, GameState, SinglePlayerGame } from "game";
+import { Board, GameBoard } from "gameboard";
 
 /**
  * Translates mouse/touches/keypress events into game actions. 
@@ -111,7 +107,7 @@ class GameControls extends Phaser.Scene {
 
     update(time: number, delta: number): void {
         if (this.controlsState.leftPressed) {
-            if (repeaty(this.controlsState.leftPressedTicks, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)) {
+            if (consts.repeaty(this.controlsState.leftPressedTicks, consts.SHIFT_TICKS_REPEAT_DELAY, consts.SHIFT_TICKS_REPEAT_RATE)) {
                 // then fire event? Dunno.
             }
             ++this.controlsState.leftPressedTicks;
@@ -119,7 +115,7 @@ class GameControls extends Phaser.Scene {
             this.controlsState.leftPressedTicks = 0;
         }
         if (this.controlsState.rightPressed) {
-            if (repeaty(this.controlsState.rightPressedTicks, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)) {
+            if (consts.repeaty(this.controlsState.rightPressedTicks, consts.SHIFT_TICKS_REPEAT_DELAY, consts.SHIFT_TICKS_REPEAT_RATE)) {
                 // then fire event? Dunno.
             }
             ++this.controlsState.rightPressedTicks;
@@ -127,7 +123,7 @@ class GameControls extends Phaser.Scene {
             this.controlsState.rightPressedTicks = 0;
         }
         if (this.controlsState.shovePressed) {
-            if (repeaty(this.controlsState.shovePressedTicks, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)) {
+            if (consts.repeaty(this.controlsState.shovePressedTicks, consts.SHIFT_TICKS_REPEAT_DELAY, consts.SHIFT_TICKS_REPEAT_RATE)) {
                 // then fire event? Dunno.
             }
             ++this.controlsState.shovePressedTicks;
@@ -153,7 +149,7 @@ class GameControls extends Phaser.Scene {
     }
 }
 
-class SceneGrid extends Phaser.Scene {
+class SceneGrid extends Phaser.Scene implements Board, SceneStuff {
     tickDuration = 1000 / 60;
     ticksLeftover: number = 0; // sometimes a little extra or a little less delta is between updates.
     gameThingies: GameThingies | undefined;
@@ -283,7 +279,15 @@ class SceneGrid extends Phaser.Scene {
         return 544 - (row * 32 + 16);
     }
 
-    gridGet(row: number, col: number): integer {
+    numGridRows(): number {
+        return this.board.numGridRows();
+    }
+
+    numGridCols(): number {
+        return this.board.numGridCols();
+    }
+
+    gridGet(row: number, col: number): number {
         return this.board.gridGet(row, col);
     }
 
@@ -314,22 +318,22 @@ class SceneGrid extends Phaser.Scene {
 
     // Deletes the cell at the location, and "unjoins" any cells joined to that cell.
     gridDelete(fancy: boolean, row: number, col: number): integer {
-        let old = this.gridGet(row, col);
+        let old = this.board.gridGet(row, col);
         // If cell is connected above, remove that cell's respective join.
         if ((old & consts.CELL_JOINED_TOP) != 0) {
-            this.gridSet(row + 1, col, this.gridGet(row + 1, col) & ~consts.CELL_JOINED_BOTTOM);
+            this.gridSet(row + 1, col, this.board.gridGet(row + 1, col) & ~consts.CELL_JOINED_BOTTOM);
         }
         // If cell is connected right, remove that cell's respective join.
         if ((old & consts.CELL_JOINED_RIGHT) != 0) {
-            this.gridSet(row, col + 1, this.gridGet(row, col + 1) & ~consts.CELL_JOINED_LEFT);
+            this.gridSet(row, col + 1, this.board.gridGet(row, col + 1) & ~consts.CELL_JOINED_LEFT);
         }
         // If cell is connected below, remove that cell's respective join.
         if ((old & consts.CELL_JOINED_BOTTOM) != 0) {
-            this.gridSet(row - 1, col, this.gridGet(row - 1, col) & ~consts.CELL_JOINED_TOP);
+            this.gridSet(row - 1, col, this.board.gridGet(row - 1, col) & ~consts.CELL_JOINED_TOP);
         }
         // If cell is connected left, remove that cell's respective join.
         if ((old & consts.CELL_JOINED_LEFT) != 0) {
-            this.gridSet(row, col - 1, this.gridGet(row, col - 1) & ~consts.CELL_JOINED_RIGHT);
+            this.gridSet(row, col - 1, this.board.gridGet(row, col - 1) & ~consts.CELL_JOINED_RIGHT);
         }
 
         // Fancy delete the given cell
@@ -357,6 +361,24 @@ class SceneGrid extends Phaser.Scene {
         return old;
     }
 
+    // Returns sets of cells to clear from the board (but doesn't clear them itself).
+    // Only settled cells are considered for clearing.
+    getCellsToClear(): [integer, integer][][] {
+        return this.board.getCellsToClear();
+    }
+
+    cellsActiveCanMove(posRow: number, posCol: number, rotation: number): boolean {
+        return this.board.cellsActiveCanMove(posRow, posCol, rotation);
+    }
+
+    sameType(cell: integer, ...cells: integer[]): boolean {
+        return this.board.sameType(cell, ...cells);
+    }
+
+    canPlaceTarget(row: number, col: number, cell: integer): boolean {
+        return this.board.canPlaceTarget(row, col, cell);
+    }
+
     constructor(config?: Phaser.Types.Core.GameConfig) {
         super(config ?? { key: 'SceneGrid', active: true });
 
@@ -366,237 +388,12 @@ class SceneGrid extends Phaser.Scene {
         }
     }
 
-    cellsActiveCanMove(posRow: number, posCol: number, rotation: number): boolean {
-        // NOTE: It may be possible to rotate if the active cells can shift left one
-
-        let legit = true;
-
-        // If horizontal, check at pos and to the right.
-        if (rotation % 2 == 0) {
-            legit = legit && (posRow >= 0) && (posRow <= this.board.gridRows - 1)
-                && (posCol >= 0) && (posCol <= this.board.gridCols - 2);
-            legit = legit
-                && this.board.grid[(posRow * this.board.gridCols) + posCol] == consts.CELL_EMPTY
-                && this.board.grid[(posRow * this.board.gridCols) + posCol + 1] == consts.CELL_EMPTY;
-        } else {
-            // If vertical, check at pos and above.
-            legit = legit && (posRow >= 0) && (posRow <= this.board.gridRows - 2)
-                && (posCol >= 0) && (posCol <= this.board.gridCols - 1);
-            legit = legit
-                && this.board.grid[(posRow * this.board.gridCols) + posCol] == consts.CELL_EMPTY
-                && this.board.grid[((posRow + 1) * this.board.gridCols) + posCol] == consts.CELL_EMPTY;
-        }
-
-        return legit;
-    }
-
-    activeSet(): void {
-        this.gameLogic.cellsActive.forEach((cell, index) => {
-            let abs = this.cellActiveGetPosAbsolute(this.gameLogic.activePosRow, this.gameLogic.activePosCol, this.gameLogic.activeRotation, index, cell);
-            this.gridSet(abs[0], abs[1], abs[2]);
-        });
-
-        // Clear the grid's topmost row of cells, as cells shouldn't be set there
-        for (let col = 0; col < this.board.gridCols; ++col) {
-            this.gridDelete(false, this.board.gridRows - 1, col);
-        }
-
-        // Delete the active sprites
-        while (this.cellsActiveDisplay.length) {
-            this.cellsActiveDisplay.shift()?.destroy();
-        }
-    }
-
-    // Returns sets of cells to clear from the board (but doesn't clear them itself).
-    // Only settled cells are considered for clearing.
-    getCellsToClear(): [integer, integer][][] {
-        let setsToClear: [integer, integer][][] = [];
-        // Find any horizontal clears
-        for (let row = 0; row < this.board.gridRows; ++row) {
-            let seriesType = 0;
-            let seriesLength = 0;
-            for (let col = 0; col < this.board.gridCols; ++col) {
-                let cell = this.gridGet(row, col);
-                let currType = cell & consts.CELL_TYPE_MASK;
-                if (currType == seriesType) {
-                    ++seriesLength;
-                } else {
-                    // If series is long enough, add cols to clear
-                    if (seriesType != 0 && seriesLength >= 4) {
-                        let cellsToClear: [integer, integer][] = [];
-                        for (let i = col - seriesLength; i < col; ++i) {
-                            cellsToClear.push([row, i]);
-                        }
-                        setsToClear.push(cellsToClear);
-                    }
-
-                    seriesType = currType;
-                    seriesLength = 1;
-                }
-            }
-            // Must check at end of each row if there is a series long enough to clear.
-            // If series is long enough, add cols to clear
-            if (seriesType != 0 && seriesLength >= 4) {
-                let cellsToClear: [integer, integer][] = [];
-                for (let i = this.board.gridCols - seriesLength; i < this.board.gridCols; ++i) {
-                    cellsToClear.push([row, i]);
-                }
-                setsToClear.push(cellsToClear);
-            }
-        }
-
-        // Find any vertical clears
-        for (let col = 0; col < this.board.gridCols; ++col) {
-            let seriesType = 0;
-            let seriesLength = 0;
-            for (let row = 0; row < this.board.gridRows; ++row) {
-                let cell = this.gridGet(row, col);
-                let currType = cell & consts.CELL_TYPE_MASK;
-                if (currType == seriesType) {
-                    ++seriesLength;
-                } else {
-                    // If series is long enough, add rows to clear
-                    if (seriesType != 0 && seriesLength >= 4) {
-                        let cellsToClear: [integer, integer][] = [];
-                        for (let i = row - seriesLength; i < row; ++i) {
-                            cellsToClear.push([i, col]);
-                        }
-                        setsToClear.push(cellsToClear);
-                    }
-
-                    seriesType = currType;
-                    seriesLength = 1;
-                }
-            }
-            // Must check at end of each col if there is a series long enough to clear.
-            // If series is long enough, add rows to clear
-            if (seriesType != 0 && seriesLength >= 4) {
-                let cellsToClear: [integer, integer][] = [];
-                for (let i = this.board.gridRows - seriesLength; i < this.board.gridRows; ++i) {
-                    cellsToClear.push([i, col]);
-                }
-                setsToClear.push(cellsToClear);
-            }
-        }
-        return setsToClear;
-    }
-
     receivedRotateCcw(): void {
-        this.rotate(-1);
+        this.gameLogic.rotate(-1, this.board, this, this.cellsActiveDisplay);
     }
 
     receivedRotateCw(): void {
-        this.rotate(1);
-    }
-
-    rotate(amount: integer): void {
-        // Can only rotate when active cell is in play
-        if (this.gameLogic.gameState != GameState.Active) {
-            return;
-        }
-
-        // If the proposed rotation will not clobber a filled cell, then allow it, but if rotating
-        // from a vertical position to a horizontal one and it would clobber a filled cell,
-        // try kicking left one col. If no clobbers, then go with that.
-        let rotation = 3 - ((3 - ((this.gameLogic.activeRotation + amount) % 4)) % 4)
-        let posCol = this.gameLogic.activePosCol;
-        if (!this.cellsActiveCanMove(this.gameLogic.activePosRow, posCol, rotation) && (rotation % 2) == 0) {
-            --posCol;
-        }
-        if (this.cellsActiveCanMove(this.gameLogic.activePosRow, posCol, rotation)) {
-            this.gameLogic.activeRotation = rotation;
-            this.gameLogic.activePosCol = posCol;
-
-            // Update display
-            // Delete the current sprites then create new ones at correct position
-            while (this.cellsActiveDisplay.length) {
-                this.cellsActiveDisplay.shift()?.destroy();
-            }
-            this.gameLogic.cellsActive.forEach((cell, index) => this.cellsActiveDisplay.push(this.cellActiveToScene(this.gameLogic.activePosRow, this.gameLogic.activePosCol, this.gameLogic.activeRotation, index, cell)));
-        }
-    }
-
-    // Drop (by one) all cells that are not settled.
-    dropDanglingCells(): boolean {
-        let dropped = false; // if at least one cell dropped by gravity, the function will need to run again.
-        let dropline = new Array<boolean>(this.board.gridCols); // Calculate drops for an entire line before dropping.
-        // Work from the bottom up (well, not the bottom-most row though)
-        for (let row = 1; row < this.board.gridRows; ++row) {
-            for (let col = 0; col < this.board.gridCols; ++col) {
-                let nodrop = false; // If nodrop is true, do not drop the cell.
-                let cell = this.gridGet(row, col);
-
-                // If the cell is empty, do not drop.
-                nodrop ||= cell == consts.CELL_EMPTY;
-                // If the cell is a target, do not drop
-                nodrop ||= (cell & consts.CELL_TARGET) > 0;
-                // If the cell below this cell is occupied, do not drop this cell.
-                nodrop ||= (this.gridGet(row - 1, col) != consts.CELL_EMPTY);
-                // If the cell is joined right, and the cell below that is occupied, don't drop.
-                nodrop ||= ((cell & consts.CELL_JOINED_RIGHT) != 0 && this.gridGet(row - 1, col + 1) != consts.CELL_EMPTY);
-                // If the cell is joined left, and the cell below that is occupied, don't drop.
-                nodrop ||= ((cell & consts.CELL_JOINED_LEFT) != 0 && this.gridGet(row - 1, col - 1) != consts.CELL_EMPTY);
-
-                dropline[col] = !nodrop;
-            }
-            // Now that each column has been calculated to drop or not, drop the correct parts of the line
-            for (let col = 0; col < this.board.gridCols; ++col) {
-                let shouldDrop = dropline[col];
-                dropped ||= shouldDrop;
-                if (shouldDrop) {
-                    this.gridMove(row, col, -1, 0);
-                }
-            }
-        }
-
-        return dropped;
-    }
-
-    sameType(cell: integer, ...cells: integer[]): boolean {
-        return cells.every(c => (c & consts.CELL_TYPE_MASK) == (cell & consts.CELL_TYPE_MASK));
-    }
-
-    canPlaceTarget(row: number, col: number, cell: integer): boolean {
-        // If the placement would collide with a filled cell, then the answer is no.
-        if (this.gridGet(row, col) != consts.CELL_EMPTY) {
-            return false;
-        }
-
-        // If the placement results in three or more consecutive targets of the same type, then
-        // it cannot be placed there.
-        let cellType = cell & consts.CELL_TYPE_MASK;
-
-        // If two cells left...
-        if (col >= 2 && this.sameType(this.gridGet(row, col - 2), this.gridGet(row, col - 1), cellType)) {
-            return false;
-        }
-
-        // If one cell left and one cell right...
-        if (col >= 1 && col <= this.board.gridCols - 2 && this.sameType(this.gridGet(row, col - 1), cellType, this.gridGet(row, col + 1))) {
-            return false;
-        }
-
-        // If two cells right...
-        if (col <= this.board.gridCols - 3 && this.sameType(cellType, this.gridGet(row, col + 1), this.gridGet(row, col + 2))) {
-            return false;
-        }
-
-        // If two cells below...
-        if (row >= 2 && this.sameType(this.gridGet(row - 2, col), this.gridGet(row - 1, col), cellType)) {
-            return false;
-        }
-
-        // If one cell below and one cell above...
-        if (row >= 1 && col <= this.board.gridRows - 2 && this.sameType(this.gridGet(row - 1, col), cellType, this.gridGet(row + 1, col))) {
-            return false;
-        }
-
-        // If two cells above...
-        if (row <= this.board.gridRows - 3 && this.sameType(cellType, this.gridGet(row + 1, col), this.gridGet(row + 2, col))) {
-            return false;
-        }
-
-        return true;
+        this.gameLogic.rotate(1, this.board, this, this.cellsActiveDisplay);
     }
 
     startup(data: GameThingies): void {
@@ -626,7 +423,7 @@ class SceneGrid extends Phaser.Scene {
             let target = consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)] | consts.CELL_TARGET;
             let placed = false;
             for (let attempts = 0; attempts < maxRow * this.board.gridCols; ++attempts) {
-                if (this.canPlaceTarget(row, col, target)) {
+                if (this.board.canPlaceTarget(row, col, target)) {
                     this.gridSet(row, col, target);
                     if ((target & consts.CELL_TYPE_MASK) == consts.CELL_1) {
                         ++this.gameLogic.targetTotals.cell1;
@@ -678,181 +475,9 @@ class SceneGrid extends Phaser.Scene {
         this.ticksLeftover = ticksAndFraction - ticksToUpdate;
 
         for (let i = 0; i < ticksToUpdate; ++i) {
-            switch (this.gameLogic.gameState) {
-                case GameState.Pregame: {
-                    // This is normally used to set up the board, but it kinda already is,
-                    // so we do nothing but start the game... for now.
-                    this.gameLogic.gameState = GameState.Releasing;
-                    break;
-                }
-                case GameState.Releasing: {
-                    if (this.gameLogic.releaseCounter == 0) {
-                        // TODO Find better place for getting next cell colors.
-                        this.gameLogic.cellsActive.length = 0;
-                        this.gameLogic.cellsActive.push(this.gameLogic.cellsNext[0], this.gameLogic.cellsNext[1]);
-                        this.gameLogic.cellsNext.length = 0;
-                        this.gameLogic.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
-                        this.gameLogic.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
-                        this.gameThingies?.boardEvents.emit('newNext', this.gameLogic.cellsNext[0], this.gameLogic.cellsNext[1]);
-                    }
-                    if (this.gameLogic.releaseCounter < 45) {
-                        ++this.gameLogic.releaseCounter;
-                    } else {
-                        this.gameLogic.releaseCounter = 0;
-
-                        // If any of the cells where the active cells are placed is filled, then game over.
-                        // (still place the active cells anyway, to show why)
-                        let start1 = this.gridGet(this.gameLogic.startRow, this.gameLogic.startCol);
-                        let start2 = this.gridGet(this.gameLogic.startRow, this.gameLogic.startCol + 1);
-
-                        this.gameLogic.gameState = GameState.Active;
-
-                        // position and display the active cells
-                        this.gameLogic.activePosRow = this.gameLogic.startRow;
-                        this.gameLogic.activePosCol = this.gameLogic.startCol;
-                        this.gameLogic.activeRotation = 0;
-                        this.gameLogic.cellsActive.forEach((cell, index) => this.cellsActiveDisplay.push(this.cellActiveToScene(this.gameLogic.activePosRow, this.gameLogic.activePosCol, this.gameLogic.activeRotation, index, cell)));
-
-                        if (start1 != consts.CELL_EMPTY || start2 != consts.CELL_EMPTY) {
-                            this.gameLogic.gameState = GameState.DoneLost;
-                        }
-                    }
-                    break;
-                }
-                case GameState.Active: {
-                    // Some systems may have so much lag that it can't keep up with a full 60 fps,
-                    // and we must process 2 or more ticks in an update (that is, if we expect 60
-                    // fps but are only getting 15, then we're doing 4 loop iterations every
-                    // update to keep the speed correct.) However, we should only read the controls
-                    // on the first iteration of the loop, otherwise it is possible for the active
-                    // cells to shift over more positions than the user wants.
-                    this.activeStateUpdate(i == 0);
-                    break;
-                }
-                case GameState.Settle: {
-                    ++this.gameLogic.settleCounter;
-                    if (this.gameLogic.settleCounter % 15 == 0) {
-                        if (!this.dropDanglingCells()) {
-                            // TODO: This should not be instant.
-                            let seriesToClear = this.getCellsToClear();
-                            seriesToClear.forEach(series => series.forEach(cell => {
-                                let deleted = this.gridDelete(true, ...cell);
-                                // Decrement the counter corresponding to the target cleared.
-                                if ((deleted & consts.CELL_TARGET) != 0) {
-                                    let deletedType = deleted & consts.CELL_TYPE_MASK;
-                                    if (deletedType == consts.CELL_1) {
-                                        --this.gameLogic.targetTotals.cell1;
-                                    } else if (deletedType == consts.CELL_2) {
-                                        --this.gameLogic.targetTotals.cell2;
-                                    } else if (deletedType == consts.CELL_3) {
-                                        --this.gameLogic.targetTotals.cell3;
-                                    }
-                                }
-                            }));
-
-                            // If all the targets are gone, then the level is cleared.
-                            if (this.gameLogic.targetTotals.cell1 + this.gameLogic.targetTotals.cell2 + this.gameLogic.targetTotals.cell3 < 1) {
-                                this.gameLogic.gameState = GameState.DoneWon;
-                            }
-
-                            // If nothing was cleared, then release the next active piece.
-                            if (seriesToClear.length == 0) {
-                                this.gameLogic.settleCounter = 0;
-                                this.gameLogic.gameState = GameState.Releasing;
-                            }
-                        }
-                    }
-                    break;
-                }
-                case GameState.DoneLost: {
-                    // TODO: This should not be instant.
-                    if (!this.scene.isActive("SceneLevelLost")) {
-                        this.scene.run("SceneLevelLost")
-                    }
-                    break;
-                }
-                case GameState.DoneWon: {
-                    // TODO: This should not be instant.
-                    if (!this.scene.isActive("SceneLevelClear")) {
-                        this.scene.run("SceneLevelClear")
-                    }
-                    if (!this.scene.isActive("SceneLevelDoneMenu")) {
-                        this.scene.run("SceneLevelDoneMenu")
-                    }
-                    break;
-                }
-            }
-            this.gameLogic.update();
+            this.gameLogic.update(i == 0, this, this.gameThingies, this, this.cellsActiveDisplay, this.scene);
         }
     }
-
-    activeStateUpdate(shouldReadControls: boolean): void {
-
-        ++this.gameLogic.dropCounter;
-
-        let changed = false;
-        let shouldSettle = false;
-
-        if (shouldReadControls && this.gameThingies?.controlsState.leftPressed) {
-            // If the active cells can go left, then go.
-            if (repeaty(this.gameThingies?.controlsState.leftPressedTicks, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)
-                && this.cellsActiveCanMove(this.gameLogic.activePosRow, this.gameLogic.activePosCol - 1, this.gameLogic.activeRotation)) {
-                --this.gameLogic.activePosCol;
-                changed = true;
-            }
-        }
-        if (shouldReadControls && this.gameThingies?.controlsState.rightPressed) {
-            // If the active cells can go right, then go.
-            if (repeaty(this.gameThingies?.controlsState.rightPressedTicks, SHIFT_TICKS_REPEAT_DELAY, SHIFT_TICKS_REPEAT_RATE)
-                && this.cellsActiveCanMove(this.gameLogic.activePosRow, this.gameLogic.activePosCol + 1, this.gameLogic.activeRotation)) {
-                ++this.gameLogic.activePosCol;
-                changed = true;
-            }
-        }
-        if (shouldReadControls && this.gameThingies?.controlsState.shovePressed) {
-            // If the active cells can go down, then go.
-            if (repeaty(this.gameThingies?.controlsState.shovePressedTicks, SHOVE_TICKS_REPEAT_DELAY, SHOVE_TICKS_REPEAT_DELAY)) {
-                if (this.cellsActiveCanMove(this.gameLogic.activePosRow - 1, this.gameLogic.activePosCol, this.gameLogic.activeRotation)) {
-                    --this.gameLogic.activePosRow;
-                    changed = true;
-                    this.gameLogic.dropCounter = 0;
-                } else {
-                    shouldSettle = true;
-                }
-            }
-        }
-
-        if (this.gameLogic.dropCounter >= this.gameLogic.dropRate) {
-            this.gameLogic.dropCounter = 0;
-            if (this.cellsActiveCanMove(this.gameLogic.activePosRow - 1, this.gameLogic.activePosCol, this.gameLogic.activeRotation)) {
-                --this.gameLogic.activePosRow;
-            } else {
-                shouldSettle = true;
-            }
-            changed = true;
-        }
-
-        if (shouldSettle) {
-            this.activeSet();
-            this.gameLogic.gameState = GameState.Settle;
-            changed = true;
-        }
-
-        // Update the positions of the active cells if anything changed
-        if (changed) {
-            this.cellsActiveDisplay.forEach((sprite: Phaser.GameObjects.Sprite | null, index) =>
-                this.cellActiveUpdatePos(this.gameLogic.activePosRow, this.gameLogic.activePosCol, this.gameLogic.activeRotation, index, sprite));
-        }
-    }
-}
-
-function repeaty(ticksActive: number, ticksRepeatDelay: number, ticksRepeatRate: number): boolean {
-    return ticksActive == 0
-        || ticksActive == ticksRepeatDelay
-        || (
-            ticksActive > ticksRepeatDelay
-            && ((ticksActive - ticksRepeatDelay) % ticksRepeatRate) == 0
-        );
 }
 
 let config = {

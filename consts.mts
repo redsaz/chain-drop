@@ -13,3 +13,18 @@ export const CELL_2_COLOR = 0x00ff00;
 export const CELL_3_COLOR = 0x4466ff;
 
 export const CELL_TYPES = [CELL_1, CELL_2, CELL_3];
+
+export const SHIFT_TICKS_REPEAT_DELAY = 15;
+export const SHIFT_TICKS_REPEAT_RATE = 6;
+export const SHOVE_TICKS_REPEAT_DELAY = 2;
+
+// TODO: This is not a const. Yet it is in the consts module. The module needs
+// renamed, or better yet, reworked to not even exist.
+export function repeaty(ticksActive: number, ticksRepeatDelay: number, ticksRepeatRate: number): boolean {
+    return ticksActive == 0
+        || ticksActive == ticksRepeatDelay
+        || (
+            ticksActive > ticksRepeatDelay
+            && ((ticksActive - ticksRepeatDelay) % ticksRepeatRate) == 0
+        );
+}
