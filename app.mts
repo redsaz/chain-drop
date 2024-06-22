@@ -154,7 +154,7 @@ class SceneGrid extends Phaser.Scene implements Board, SceneStuff {
     ticksLeftover: number = 0; // sometimes a little extra or a little less delta is between updates.
     gameThingies: GameThingies | undefined;
 
-    gameLogic: SinglePlayerGame = new SinglePlayerGame();
+    gameLogic: SinglePlayerGame = new SinglePlayerGame(new TargetTotals(), 0);
     board: GameBoard = new GameBoard();
 
     gridDisplay: (Phaser.GameObjects.Sprite | null)[] = Array(this.board.gridRows * this.board.gridCols);
@@ -403,18 +403,11 @@ class SceneGrid extends Phaser.Scene implements Board, SceneStuff {
         }
 
         this.gameThingies = data;
-        this.gameLogic.gameState = GameState.Pregame;
-        this.board.grid.forEach((item, i, arr) => arr[i] = consts.CELL_EMPTY);
-        this.gameLogic.level = data.gameSettings.level ?? 0;
+        this.gameLogic = new SinglePlayerGame(data.targetTotals, data.gameSettings.level);
         let level = LEVELS[Math.min(this.gameLogic.level, 20)];
         let numTargets = level.numTargets;
-        this.gameLogic.targetTotals = data.targetTotals ?? this.gameLogic.targetTotals;
-        this.gameThingies.boardEvents.emit('newBoard', this.gameLogic.level);
+        this.board.grid.forEach((item, i, arr) => arr[i] = consts.CELL_EMPTY);
         this.add.rectangle(128, 272, 256, 544, 0, 0.5);
-        this.gameLogic.cellsNext.length = 0;
-        this.gameLogic.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
-        this.gameLogic.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
-        this.gameThingies.boardEvents.emit('newNext', this.gameLogic.cellsNext[0], this.gameLogic.cellsNext[1]);
         // Add some targets on the board
         let maxRow = level.highestRow;
         for (let i = 0; i < numTargets; ++i) {
@@ -444,11 +437,8 @@ class SceneGrid extends Phaser.Scene implements Board, SceneStuff {
                 }
             }
         }
-
-        // Init the active cells
-        this.gameLogic.activePosRow = this.gameLogic.startRow;
-        this.gameLogic.activePosCol = this.gameLogic.startCol;
-        this.gameLogic.activeRotation = 0;
+        this.gameThingies.boardEvents.emit('newBoard', this.gameLogic.level);
+        this.gameThingies.boardEvents.emit('newNext', this.gameLogic.cellsNext[0], this.gameLogic.cellsNext[1]);
     }
 
     preload(): void {
@@ -480,7 +470,7 @@ class SceneGrid extends Phaser.Scene implements Board, SceneStuff {
     }
 }
 
-let config = {
+let config: Phaser.Types.Core.GameConfig = {
     type: Phaser.AUTO,
     parent: 'content',
     backgroundColor: '#253912',

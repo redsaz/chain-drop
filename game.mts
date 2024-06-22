@@ -80,8 +80,9 @@ export enum GameState {
 }
 
 export class SinglePlayerGame {
-    tick: number = 0; // The current logical "frame" the game is at (not graphical frame)
+    #tick: number = 0; // The current logical "frame" the game is at (not graphical frame)
     // TODO: Make gameState be private #gameState and handle state logic within.
+    // TODO: Make the rest private as well.
     gameState: GameState = GameState.Pregame;
     level = 0;
     startRow = 15;
@@ -89,16 +90,29 @@ export class SinglePlayerGame {
     activePosRow = 0;
     activePosCol = 0;
     activeRotation = 0;
-    cellsActive: integer[] = Array();
+    #cellsActive: integer[] = Array();
     cellsNext: integer[] = Array();
-    dropCounter = 0;
-    dropRate = 40;
-    targetTotals = new TargetTotals(); // a new instance should get passed in with create();
-    releaseCounter = 0;
-    settleCounter = 0;
+    #dropCounter = 0;
+    #dropRate = 40;
+    targetTotals: TargetTotals;
+    #releaseCounter = 0;
+    #settleCounter = 0;
 
-    activeSet(board: Board, stuff: SceneStuff, cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[]): void {
-        this.cellsActive.forEach((cell, index) => {
+    constructor(targetTotals: TargetTotals, level: number) {
+        this.gameState = GameState.Pregame;
+        this.targetTotals = targetTotals;
+        this.level = level;
+        this.cellsNext.length = 0;
+        this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
+        this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
+        // Init the active cells
+        this.activePosRow = this.startRow;
+        this.activePosCol = this.startCol;
+        this.activeRotation = 0;
+    }
+
+    #activeSet(board: Board, stuff: SceneStuff, cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[]): void {
+        this.#cellsActive.forEach((cell, index) => {
             let abs = stuff.cellActiveGetPosAbsolute(this.activePosRow, this.activePosCol, this.activeRotation, index, cell);
             board.gridSet(abs[0], abs[1], abs[2]);
         });
@@ -138,12 +152,12 @@ export class SinglePlayerGame {
             while (cellsActiveDisplay.length) {
                 cellsActiveDisplay.shift()?.destroy();
             }
-            this.cellsActive.forEach((cell, index) => cellsActiveDisplay.push(stuff.cellActiveToScene(this.activePosRow, this.activePosCol, this.activeRotation, index, cell)));
+            this.#cellsActive.forEach((cell, index) => cellsActiveDisplay.push(stuff.cellActiveToScene(this.activePosRow, this.activePosCol, this.activeRotation, index, cell)));
         }
     }
 
     // Drop (by one) all cells that are not settled.
-    dropDanglingCells(board: Board): boolean {
+    #dropDanglingCells(board: Board): boolean {
         let dropped = false; // if at least one cell dropped by gravity, the function will need to run again.
         let dropline = new Array<boolean>(board.numGridCols()); // Calculate drops for an entire line before dropping.
         // Work from the bottom up (well, not the bottom-most row though)
@@ -178,9 +192,9 @@ export class SinglePlayerGame {
         return dropped;
     }
 
-    activeStateUpdate(shouldReadControls: boolean, stuff: SceneStuff, gameThingies: GameThingies | undefined, board: Board, cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[], scene: Phaser.Scenes.ScenePlugin ): void {
+    #activeStateUpdate(shouldReadControls: boolean, stuff: SceneStuff, gameThingies: GameThingies | undefined, board: Board, cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[], scene: Phaser.Scenes.ScenePlugin ): void {
 
-        ++this.dropCounter;
+        ++this.#dropCounter;
 
         let changed = false;
         let shouldSettle = false;
@@ -207,15 +221,15 @@ export class SinglePlayerGame {
                 if (board.cellsActiveCanMove(this.activePosRow - 1, this.activePosCol, this.activeRotation)) {
                     --this.activePosRow;
                     changed = true;
-                    this.dropCounter = 0;
+                    this.#dropCounter = 0;
                 } else {
                     shouldSettle = true;
                 }
             }
         }
 
-        if (this.dropCounter >= this.dropRate) {
-            this.dropCounter = 0;
+        if (this.#dropCounter >= this.#dropRate) {
+            this.#dropCounter = 0;
             if (board.cellsActiveCanMove(this.activePosRow - 1, this.activePosCol, this.activeRotation)) {
                 --this.activePosRow;
             } else {
@@ -225,7 +239,7 @@ export class SinglePlayerGame {
         }
 
         if (shouldSettle) {
-            this.activeSet(board, stuff, cellsActiveDisplay);
+            this.#activeSet(board, stuff, cellsActiveDisplay);
             this.gameState = GameState.Settle;
             changed = true;
         }
@@ -238,7 +252,7 @@ export class SinglePlayerGame {
     }
 
     update(shouldReadControls: boolean, stuff: SceneStuff, gameThingies: GameThingies | undefined, board: Board, cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[], scene: Phaser.Scenes.ScenePlugin ) {
-        ++this.tick;
+        ++this.#tick;
         switch (this.gameState) {
             case GameState.Pregame: {
                 // This is normally used to set up the board, but it kinda already is,
@@ -247,19 +261,19 @@ export class SinglePlayerGame {
                 break;
             }
             case GameState.Releasing: {
-                if (this.releaseCounter == 0) {
+                if (this.#releaseCounter == 0) {
                     // TODO Find better place for getting next cell colors.
-                    this.cellsActive.length = 0;
-                    this.cellsActive.push(this.cellsNext[0], this.cellsNext[1]);
+                    this.#cellsActive.length = 0;
+                    this.#cellsActive.push(this.cellsNext[0], this.cellsNext[1]);
                     this.cellsNext.length = 0;
                     this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
                     this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
                     gameThingies?.boardEvents.emit('newNext', this.cellsNext[0], this.cellsNext[1]);
                 }
-                if (this.releaseCounter < 45) {
-                    ++this.releaseCounter;
+                if (this.#releaseCounter < 45) {
+                    ++this.#releaseCounter;
                 } else {
-                    this.releaseCounter = 0;
+                    this.#releaseCounter = 0;
 
                     // If any of the cells where the active cells are placed is filled, then game over.
                     // (still place the active cells anyway, to show why)
@@ -272,7 +286,7 @@ export class SinglePlayerGame {
                     this.activePosRow = this.startRow;
                     this.activePosCol = this.startCol;
                     this.activeRotation = 0;
-                    this.cellsActive.forEach((cell, index) => cellsActiveDisplay.push(stuff.cellActiveToScene(this.activePosRow, this.activePosCol, this.activeRotation, index, cell)));
+                    this.#cellsActive.forEach((cell, index) => cellsActiveDisplay.push(stuff.cellActiveToScene(this.activePosRow, this.activePosCol, this.activeRotation, index, cell)));
 
                     if (start1 != consts.CELL_EMPTY || start2 != consts.CELL_EMPTY) {
                         this.gameState = GameState.DoneLost;
@@ -287,13 +301,13 @@ export class SinglePlayerGame {
                 // update to keep the speed correct.) However, we should only read the controls
                 // on the first iteration of the loop, otherwise it is possible for the active
                 // cells to shift over more positions than the user wants.
-                this.activeStateUpdate(shouldReadControls, stuff, gameThingies, board, cellsActiveDisplay, scene);
+                this.#activeStateUpdate(shouldReadControls, stuff, gameThingies, board, cellsActiveDisplay, scene);
                 break;
             }
             case GameState.Settle: {
-                ++this.settleCounter;
-                if (this.settleCounter % 15 == 0) {
-                    if (!this.dropDanglingCells(board)) {
+                ++this.#settleCounter;
+                if (this.#settleCounter % 15 == 0) {
+                    if (!this.#dropDanglingCells(board)) {
                         // TODO: This should not be instant.
                         let seriesToClear = board.getCellsToClear();
                         seriesToClear.forEach(series => series.forEach(cell => {
@@ -318,7 +332,7 @@ export class SinglePlayerGame {
 
                         // If nothing was cleared, then release the next active piece.
                         if (seriesToClear.length == 0) {
-                            this.settleCounter = 0;
+                            this.#settleCounter = 0;
                             this.gameState = GameState.Releasing;
                         }
                     }
