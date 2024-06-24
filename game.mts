@@ -1,7 +1,6 @@
 /// <reference path="types/phaser.d.ts"/>
 import * as consts from "consts";
 import { Board, GameBoard } from "gameboard";
-import { Scene } from "phaser";
 
 export class TargetTotals {
     cell1 = 0;
@@ -40,8 +39,8 @@ export interface Level {
 }
 
 export interface SceneStuff {
-    cellToScene(row: integer, col: integer, cellValue: integer): Phaser.GameObjects.Sprite | null,    cellActiveToScene(row: integer, col: integer, rotation: integer, index: number, cellValue: integer): Phaser.GameObjects.Sprite | null,
-    cellActiveGetPosAbsolute(row: integer, col: integer, rotation: integer, index: number, cellValue: integer): [integer, integer, integer],    cellActiveUpdatePos(row: integer, col: integer, rotation: integer, index: number, sprite: Phaser.GameObjects.Sprite | null): void,
+    cellToScene(row: integer, col: integer, cellValue: integer): Phaser.GameObjects.Sprite | null, cellActiveToScene(row: integer, col: integer, rotation: integer, index: number, cellValue: integer): Phaser.GameObjects.Sprite | null,
+    cellActiveGetPosAbsolute(row: integer, col: integer, rotation: integer, index: number, cellValue: integer): [integer, integer, integer], cellActiveUpdatePos(row: integer, col: integer, rotation: integer, index: number, sprite: Phaser.GameObjects.Sprite | null): void,
     colToX(col: integer): integer,
     rowToY(row: integer): integer,
 }
@@ -79,6 +78,8 @@ export enum GameState {
     DoneWon, // The game is finished, the player won.
 }
 
+export type ActionEvent = "noop" | "left" | "right" | "rotateCcw" | "rotateCw" | "shove";
+
 export class SinglePlayerGame {
     #tick: number = 0; // The current logical "frame" the game is at (not graphical frame)
     // TODO: Make gameState be private #gameState and handle state logic within.
@@ -97,6 +98,7 @@ export class SinglePlayerGame {
     targetTotals: TargetTotals;
     #releaseCounter = 0;
     #settleCounter = 0;
+    #actionEvents: ActionEvent[] = Array();
 
     constructor(targetTotals: TargetTotals, level: number) {
         this.gameState = GameState.Pregame;
@@ -129,7 +131,21 @@ export class SinglePlayerGame {
         }
     }
 
-    rotate(amount: integer, board: GameBoard, stuff: SceneStuff, cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[]): void {
+    // Pushes an action event to the current tick's queue. Multiple actions can
+    // be performed per tick, but only a maximum of one per action (so, you can
+    // shove down, and move left, but you can shove down 5 times and move left
+    // 3 times in a single tick.)
+    // If an action can't be performed (either because the game state doesn't
+    // allow it, like currently waiting for the cells to settle, or because the
+    // move is blocked, like can't move left because piece is at edge already)
+    // then the action is dropped. No actions carry over to the next tick.
+    pushActionEvent(actionEvent: ActionEvent): void {
+        if (!this.#actionEvents.includes(actionEvent)) {
+            this.#actionEvents.push(actionEvent);
+        }
+    }
+
+    #rotate(amount: integer, board: Board, stuff: SceneStuff, cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[]): void {
         // Can only rotate when active cell is in play
         if (this.gameState != GameState.Active) {
             return;
@@ -192,41 +208,53 @@ export class SinglePlayerGame {
         return dropped;
     }
 
-    #activeStateUpdate(shouldReadControls: boolean, stuff: SceneStuff, gameThingies: GameThingies | undefined, board: Board, cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[], scene: Phaser.Scenes.ScenePlugin ): void {
+    #activeStateUpdate(shouldReadControls: boolean, stuff: SceneStuff, gameThingies: GameThingies | undefined, board: Board, cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[], scene: Phaser.Scenes.ScenePlugin): void {
 
         ++this.#dropCounter;
 
         let changed = false;
         let shouldSettle = false;
 
-        if (shouldReadControls && gameThingies?.controlsState.leftPressed) {
-            // If the active cells can go left, then go.
-            if (consts.repeaty(gameThingies?.controlsState.leftPressedTicks, consts.SHIFT_TICKS_REPEAT_DELAY, consts.SHIFT_TICKS_REPEAT_RATE)
-                && board.cellsActiveCanMove(this.activePosRow, this.activePosCol - 1, this.activeRotation)) {
-                --this.activePosCol;
-                changed = true;
+        this.#actionEvents.forEach((actionEvent) => {
+            console.log(`Consider that I did something with action=${actionEvent}`);
+            switch (actionEvent) {
+                case "noop":
+                    // Do nothing.
+                    break;
+                case "left":
+                    // If the active cells can go left, then go.
+                    if (board.cellsActiveCanMove(this.activePosRow, this.activePosCol - 1, this.activeRotation)) {
+                        --this.activePosCol;
+                        changed = true;
+                    }
+                    break;
+                case "right":
+                    if (board.cellsActiveCanMove(this.activePosRow, this.activePosCol + 1, this.activeRotation)) {
+                        ++this.activePosCol;
+                        changed = true;
+                    }
+                    break;
+                case "rotateCcw":
+                    this.#rotate(-1, board, stuff, cellsActiveDisplay);
+                    break;
+                case "rotateCw":
+                    this.#rotate(1, board, stuff, cellsActiveDisplay);
+                    break;
+                case "shove":
+                    if (board.cellsActiveCanMove(this.activePosRow - 1, this.activePosCol, this.activeRotation)) {
+                        --this.activePosRow;
+                        changed = true;
+                        this.#dropCounter = 0;
+                    } else {
+                        shouldSettle = true;
+                    }
+                    break;
+                default:
+                    console.log(`Unknown action=${actionEvent}`);
             }
-        }
-        if (shouldReadControls && gameThingies?.controlsState.rightPressed) {
-            // If the active cells can go right, then go.
-            if (consts.repeaty(gameThingies?.controlsState.rightPressedTicks, consts.SHIFT_TICKS_REPEAT_DELAY, consts.SHIFT_TICKS_REPEAT_RATE)
-                && board.cellsActiveCanMove(this.activePosRow, this.activePosCol + 1, this.activeRotation)) {
-                ++this.activePosCol;
-                changed = true;
-            }
-        }
-        if (shouldReadControls && gameThingies?.controlsState.shovePressed) {
-            // If the active cells can go down, then go.
-            if (consts.repeaty(gameThingies?.controlsState.shovePressedTicks, consts.SHOVE_TICKS_REPEAT_DELAY, consts.SHOVE_TICKS_REPEAT_DELAY)) {
-                if (board.cellsActiveCanMove(this.activePosRow - 1, this.activePosCol, this.activeRotation)) {
-                    --this.activePosRow;
-                    changed = true;
-                    this.#dropCounter = 0;
-                } else {
-                    shouldSettle = true;
-                }
-            }
-        }
+        });
+        // All requested actions completed, so clean the queue for the next tick.
+        this.#actionEvents.length = 0;
 
         if (this.#dropCounter >= this.#dropRate) {
             this.#dropCounter = 0;
@@ -251,7 +279,7 @@ export class SinglePlayerGame {
         }
     }
 
-    update(shouldReadControls: boolean, stuff: SceneStuff, gameThingies: GameThingies | undefined, board: Board, cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[], scene: Phaser.Scenes.ScenePlugin ) {
+    update(shouldReadControls: boolean, stuff: SceneStuff, gameThingies: GameThingies | undefined, board: Board, cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[], scene: Phaser.Scenes.ScenePlugin) {
         ++this.#tick;
         switch (this.gameState) {
             case GameState.Pregame: {

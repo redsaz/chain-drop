@@ -3,7 +3,7 @@
 // @Filename: scenes.mts
 import { SceneBackground, SceneTargetTotals, SceneNextCells, SceneLevelInfo, SceneMultitouch, SceneLevelClear, SceneLevelLost, SceneLevelDoneMenu } from "scenes";
 import * as consts from "consts";
-import { GameThingies, GameSettings, ControlsState, TargetTotals, SceneStuff, LEVELS, GameState, SinglePlayerGame } from "game";
+import { GameThingies, GameSettings, ControlsState, TargetTotals, SceneStuff, LEVELS, GameState, SinglePlayerGame, ActionEvent } from "game";
 import { Board, GameBoard } from "gameboard";
 
 /**
@@ -26,8 +26,6 @@ class GameControls extends Phaser.Scene {
 
     controlsEvents = new Phaser.Events.EventEmitter(); // To be overwritten by create.
     controlsState = new ControlsState(); // To be overwritten by create.
-    rotateCwClearNext = false;
-    rotateCcwClearNext = false;
 
     constructor(config: Phaser.Types.Scenes.SettingsConfig) {
         super(config);
@@ -95,20 +93,16 @@ class GameControls extends Phaser.Scene {
     receivedRotateCcw(): void {
         // NOTE: THIS WON'T DO THE ADVERTIZED LOGIC (but it's a good mvp)
         this.controlsState.rotateCcw = true;
-        this.rotateCcwClearNext = true;
-        this.controlsEvents.emit('rotateccw');
     }
 
     receivedRotateCw(): void {
         this.controlsState.rotateCw = true;
-        this.rotateCwClearNext = true;
-        this.controlsEvents.emit('rotatecw');
     }
 
     update(time: number, delta: number): void {
         if (this.controlsState.leftPressed) {
             if (consts.repeaty(this.controlsState.leftPressedTicks, consts.SHIFT_TICKS_REPEAT_DELAY, consts.SHIFT_TICKS_REPEAT_RATE)) {
-                // then fire event? Dunno.
+                this.controlsEvents.emit("action", "left");
             }
             ++this.controlsState.leftPressedTicks;
         } else {
@@ -116,35 +110,27 @@ class GameControls extends Phaser.Scene {
         }
         if (this.controlsState.rightPressed) {
             if (consts.repeaty(this.controlsState.rightPressedTicks, consts.SHIFT_TICKS_REPEAT_DELAY, consts.SHIFT_TICKS_REPEAT_RATE)) {
-                // then fire event? Dunno.
+                this.controlsEvents.emit("action", "right");
             }
             ++this.controlsState.rightPressedTicks;
         } else {
             this.controlsState.rightPressedTicks = 0;
         }
         if (this.controlsState.shovePressed) {
-            if (consts.repeaty(this.controlsState.shovePressedTicks, consts.SHIFT_TICKS_REPEAT_DELAY, consts.SHIFT_TICKS_REPEAT_RATE)) {
-                // then fire event? Dunno.
+            if (consts.repeaty(this.controlsState.shovePressedTicks, consts.SHOVE_TICKS_REPEAT_DELAY, consts.SHOVE_TICKS_REPEAT_DELAY)) {
+                this.controlsEvents.emit("action", "shove");
             }
             ++this.controlsState.shovePressedTicks;
         } else {
             this.controlsState.shovePressedTicks = 0;
         }
         if (this.controlsState.rotateCcw) {
-            // then fire event? Dunno.
-            if (this.rotateCcwClearNext) {
-                this.rotateCcwClearNext = false;
-            } else {
-                this.controlsState.rotateCcw = false; // Effect has no repeats, so it's done
-            }
+            this.controlsEvents.emit("action", "rotateCcw");
+            this.controlsState.rotateCcw = false; // Effect has no repeats, so it's done
         }
-        if (this.controlsState.rotateCcw) {
-            // then fire event? Dunno.
-            if (this.rotateCwClearNext) {
-                this.rotateCwClearNext = false;
-            } else {
-                this.controlsState.rotateCw = false; // Effect has no repeats, so it's done
-            }
+        if (this.controlsState.rotateCw) {
+            this.controlsEvents.emit("action", "rotateCw");
+            this.controlsState.rotateCw = false; // Effect has no repeats, so it's done
         }
     }
 }
@@ -388,18 +374,13 @@ class SceneGrid extends Phaser.Scene implements Board, SceneStuff {
         }
     }
 
-    receivedRotateCcw(): void {
-        this.gameLogic.rotate(-1, this.board, this, this.cellsActiveDisplay);
-    }
-
-    receivedRotateCw(): void {
-        this.gameLogic.rotate(1, this.board, this, this.cellsActiveDisplay);
+    receivedAction(actionEvent: ActionEvent): void {
+        this.gameLogic.pushActionEvent(actionEvent);
     }
 
     startup(data: GameThingies): void {
         if (this.gameThingies?.controlsEvents != data.controlsEvents) {
-            data.controlsEvents.on('rotateccw', this.receivedRotateCcw, this);
-            data.controlsEvents.on('rotatecw', this.receivedRotateCw, this);
+            data.controlsEvents.on("action", this.receivedAction, this);
         }
 
         this.gameThingies = data;
