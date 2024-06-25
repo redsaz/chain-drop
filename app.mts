@@ -6,6 +6,41 @@ import * as consts from "consts";
 import { GameThingies, GameSettings, ControlsState, TargetTotals, SceneStuff, LEVELS, GameState, SinglePlayerGame, ActionEvent } from "game";
 import { Board, GameBoard } from "gameboard";
 
+interface Repeater {
+    shouldFire(time: number, delta: number): boolean;
+    released: boolean;
+}
+
+class SingleFire implements Repeater {
+    fired: boolean = false;
+    released: boolean = true;
+
+    shouldFire(time: number, delta: number): boolean {
+        this.fired = true;
+        return this.fired;
+    }
+}
+
+class RepeatFire implements Repeater {
+    released: boolean = false;
+    ticksHeld: number = 0;
+    delay: number = 0;
+    repeatRate: number = 0;
+
+    constructor(delay: number, repeatRate: number) {
+        this.delay = delay;
+        this.repeatRate = repeatRate;
+    }
+
+    shouldFire(time: number, delta: number): boolean {
+        // TODO: This probably should be based on actual time and delta, rather
+        // than how often it was called.
+        const fire = consts.repeaty(this.ticksHeld, this.delay, this.repeatRate);
+        ++this.ticksHeld;
+        return fire;
+    }
+}
+
 /**
  * Translates mouse/touches/keypress events into game actions. 
  * This exists for several reasons:
@@ -25,7 +60,8 @@ import { Board, GameBoard } from "gameboard";
 class GameControls extends Phaser.Scene {
 
     controlsEvents = new Phaser.Events.EventEmitter(); // To be overwritten by create.
-    controlsState = new ControlsState(); // To be overwritten by create.
+    controlies: Record<string, Repeater> = {}; // key: the control, value: the number of ticks held.
+    // controlsState = new ControlsState(); // To be overwritten by create.
 
     constructor(config: Phaser.Types.Scenes.SettingsConfig) {
         super(config);
@@ -36,101 +72,53 @@ class GameControls extends Phaser.Scene {
 
     create(data: GameThingies): void {
         this.controlsEvents = data.controlsEvents;
-        this.controlsState = data.controlsState;
+        // this.controlsState = data.controlsState;
         let cevents = this.controlsEvents;
         if (this.input.keyboard !== null) {
             let cursors = this.input.keyboard.createCursorKeys();
-            cursors.space.on('down', () => cevents.emit('_internal_rotateccw'), this);
-            cursors.up.on('down', () => cevents.emit('_internal_rotatecw'), this);
-            cursors.left.on('down', () => cevents.emit('_internal_leftpressed'), this);
-            cursors.left.on('up', () => cevents.emit('_internal_leftreleased'), this);
-            cursors.right.on('down', () => cevents.emit('_internal_rightpressed'), this);
-            cursors.right.on('up', () => cevents.emit('_internal_rightreleased'), this);
-            cursors.down.on('down', () => cevents.emit('_internal_shovepressed'), this);
-            cursors.down.on('up', () => cevents.emit('_internal_shovereleased'), this);
+            cursors.space.on('down', () => cevents.emit("down", "rotateCcw", new SingleFire()), this);
+            cursors.up.on('down', () => cevents.emit("down", "rotateCw", new SingleFire()), this);
+            cursors.left.on('down', () => cevents.emit("down", "left", new RepeatFire(consts.SHIFT_TICKS_REPEAT_DELAY, consts.SHIFT_TICKS_REPEAT_RATE)), this);
+            cursors.left.on('up', () => cevents.emit("up", "left"), this);
+            cursors.right.on('down', () => cevents.emit("down", "right", new RepeatFire(consts.SHIFT_TICKS_REPEAT_DELAY, consts.SHIFT_TICKS_REPEAT_RATE)), this);
+            cursors.right.on('up', () => cevents.emit("up", "right"), this);
+            cursors.down.on('down', () => cevents.emit("down", "shove", new RepeatFire(consts.SHOVE_TICKS_REPEAT_DELAY, consts.SHOVE_TICKS_REPEAT_DELAY)), this);
+            cursors.down.on('up', () => cevents.emit("up", "shove"), this);
         }
 
-        cevents.on('_internal_leftpressed', this.receivedLeftPressed, this);
-        cevents.on('_internal_leftreleased', this.receivedLeftReleased, this);
-        cevents.on('_internal_rightpressed', this.receivedRightPressed, this);
-        cevents.on('_internal_rightreleased', this.receivedRightReleased, this);
-        cevents.on('_internal_shovepressed', this.receivedShovePressed, this);
-        cevents.on('_internal_shovereleased', this.receivedShoveReleased, this);
-        cevents.on('_internal_rotateccw', this.receivedRotateCcw, this);
-        cevents.on('_internal_rotatecw', this.receivedRotateCw, this);
+        cevents.on("down", this.receivedDown, this);
+        cevents.on("up", this.receivedUp, this);
     }
 
-    receivedLeftPressed(): void {
-        // NOTE: THIS WON'T DO THE ADVERTIZED LOGIC (but it's a good mvp)
-        this.controlsState.leftPressed = true;
+    receivedDown(action: string, repeater: Repeater): void {
+        // Only add if it isn't already in the map, because if there were two
+        // different inputs to the same action, and both inputs were activated
+        // at different times, the later of the two would "reset" the repeater
+        // counter, which we don't want.
+        if (!(action in this.controlies)) {
+            this.controlies[action] = repeater;
+        }
     }
 
-    receivedLeftReleased(): void {
-        // NOTE: THIS WON'T DO THE ADVERTIZED LOGIC (but it's a good mvp)
-        this.controlsState.leftPressed = false;
-    }
-
-    receivedRightPressed(): void {
-        // NOTE: THIS WON'T DO THE ADVERTIZED LOGIC (but it's a good mvp)
-        this.controlsState.rightPressed = true;
-    }
-
-    receivedRightReleased(): void {
-        // NOTE: THIS WON'T DO THE ADVERTIZED LOGIC (but it's a good mvp)
-        this.controlsState.rightPressed = false;
-    }
-
-    receivedShovePressed(): void {
-        // NOTE: THIS WON'T DO THE ADVERTIZED LOGIC (but it's a good mvp)
-        this.controlsState.shovePressed = true;
-    }
-
-    receivedShoveReleased(): void {
-        // NOTE: THIS WON'T DO THE ADVERTIZED LOGIC (but it's a good mvp)
-        this.controlsState.shovePressed = false;
-    }
-
-    receivedRotateCcw(): void {
-        // NOTE: THIS WON'T DO THE ADVERTIZED LOGIC (but it's a good mvp)
-        this.controlsState.rotateCcw = true;
-    }
-
-    receivedRotateCw(): void {
-        this.controlsState.rotateCw = true;
+    receivedUp(action: string): void {
+        // We do not delete it here, but later at the update. Among other
+        // effects, this allows a single down/up combo in a single tick to
+        // still fire the action.
+        if (action in this.controlies) {
+            this.controlies[action].released = true;
+        }
     }
 
     update(time: number, delta: number): void {
-        if (this.controlsState.leftPressed) {
-            if (consts.repeaty(this.controlsState.leftPressedTicks, consts.SHIFT_TICKS_REPEAT_DELAY, consts.SHIFT_TICKS_REPEAT_RATE)) {
-                this.controlsEvents.emit("action", "left");
+        for (const [k, v] of Object.entries(this.controlies)) {
+            if (v !== null && typeof v.shouldFire === 'function') {
+                if (v.shouldFire(time, delta)) {
+                    this.controlsEvents.emit("action", k);
+                }
+                if (v.released) {
+                    delete this.controlies[k];
+                }
             }
-            ++this.controlsState.leftPressedTicks;
-        } else {
-            this.controlsState.leftPressedTicks = 0;
-        }
-        if (this.controlsState.rightPressed) {
-            if (consts.repeaty(this.controlsState.rightPressedTicks, consts.SHIFT_TICKS_REPEAT_DELAY, consts.SHIFT_TICKS_REPEAT_RATE)) {
-                this.controlsEvents.emit("action", "right");
-            }
-            ++this.controlsState.rightPressedTicks;
-        } else {
-            this.controlsState.rightPressedTicks = 0;
-        }
-        if (this.controlsState.shovePressed) {
-            if (consts.repeaty(this.controlsState.shovePressedTicks, consts.SHOVE_TICKS_REPEAT_DELAY, consts.SHOVE_TICKS_REPEAT_DELAY)) {
-                this.controlsEvents.emit("action", "shove");
-            }
-            ++this.controlsState.shovePressedTicks;
-        } else {
-            this.controlsState.shovePressedTicks = 0;
-        }
-        if (this.controlsState.rotateCcw) {
-            this.controlsEvents.emit("action", "rotateCcw");
-            this.controlsState.rotateCcw = false; // Effect has no repeats, so it's done
-        }
-        if (this.controlsState.rotateCw) {
-            this.controlsEvents.emit("action", "rotateCw");
-            this.controlsState.rotateCw = false; // Effect has no repeats, so it's done
         }
     }
 }
