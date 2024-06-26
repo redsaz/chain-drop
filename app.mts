@@ -3,125 +3,9 @@
 // @Filename: scenes.mts
 import { SceneBackground, SceneTargetTotals, SceneNextCells, SceneLevelInfo, SceneMultitouch, SceneLevelClear, SceneLevelLost, SceneLevelDoneMenu } from "scenes";
 import * as consts from "consts";
-import { GameThingies, GameSettings, ControlsState, TargetTotals, SceneStuff, LEVELS, GameState, SinglePlayerGame, ActionEvent } from "game";
+import { GameThingies, GameSettings, TargetTotals, SceneStuff, LEVELS, SinglePlayerGame, ActionEvent } from "game";
 import { Board, GameBoard } from "gameboard";
-
-interface Repeater {
-    shouldFire(time: number, delta: number): boolean;
-    released: boolean;
-}
-
-class SingleFire implements Repeater {
-    fired: boolean = false;
-    released: boolean = true;
-
-    shouldFire(time: number, delta: number): boolean {
-        this.fired = true;
-        return this.fired;
-    }
-}
-
-class RepeatFire implements Repeater {
-    released: boolean = false;
-    ticksHeld: number = 0;
-    delay: number = 0;
-    repeatRate: number = 0;
-
-    constructor(delay: number, repeatRate: number) {
-        this.delay = delay;
-        this.repeatRate = repeatRate;
-    }
-
-    shouldFire(time: number, delta: number): boolean {
-        // TODO: This probably should be based on actual time and delta, rather
-        // than how often it was called.
-        const fire = consts.repeaty(this.ticksHeld, this.delay, this.repeatRate);
-        ++this.ticksHeld;
-        return fire;
-    }
-}
-
-/**
- * Translates mouse/touches/keypress events into game actions. 
- * This exists for several reasons:
- * 1. The core game logic itself doesn't have to deal with multiple input sources and conflicts
- *    that can result. For example, it is possible for the player to press the left key while
- *    pressing the onscreen right button at the same time.
- * 2. So that multiple events do not get sent within the same "tick" of the game. Like, say,
- *    spamming the "leftpressed" and "leftreleased" events multiple times in a single tick in
- *    order to get the active block shoved all the way to the left.
- * 3. Similar to the first two reasons, this can prevent multiple events from different inputs
- *    from "stomping" on each other. For example, if the player holds down the left key, then
- *    presses the left onscreen button and releases it, and then releases the left key,
- *    there won't be two "left action pressed" and two "left action released" events sent to the
- *    core game logic. (Would the game consider the left button release after the first "released
- *    event", or some time later after the second "released event")?
- */
-class GameControls extends Phaser.Scene {
-
-    controlsEvents = new Phaser.Events.EventEmitter(); // To be overwritten by create.
-    controlies: Record<string, Repeater> = {}; // key: the control, value: the number of ticks held.
-    // controlsState = new ControlsState(); // To be overwritten by create.
-
-    constructor(config: Phaser.Types.Scenes.SettingsConfig) {
-        super(config);
-    }
-
-    preload(): void {
-    }
-
-    create(data: GameThingies): void {
-        this.controlsEvents = data.controlsEvents;
-        // this.controlsState = data.controlsState;
-        let cevents = this.controlsEvents;
-        if (this.input.keyboard !== null) {
-            let cursors = this.input.keyboard.createCursorKeys();
-            cursors.space.on('down', () => cevents.emit("down", "rotateCcw", new SingleFire()), this);
-            cursors.up.on('down', () => cevents.emit("down", "rotateCw", new SingleFire()), this);
-            cursors.left.on('down', () => cevents.emit("down", "left", new RepeatFire(consts.SHIFT_TICKS_REPEAT_DELAY, consts.SHIFT_TICKS_REPEAT_RATE)), this);
-            cursors.left.on('up', () => cevents.emit("up", "left"), this);
-            cursors.right.on('down', () => cevents.emit("down", "right", new RepeatFire(consts.SHIFT_TICKS_REPEAT_DELAY, consts.SHIFT_TICKS_REPEAT_RATE)), this);
-            cursors.right.on('up', () => cevents.emit("up", "right"), this);
-            cursors.down.on('down', () => cevents.emit("down", "shove", new RepeatFire(consts.SHOVE_TICKS_REPEAT_DELAY, consts.SHOVE_TICKS_REPEAT_DELAY)), this);
-            cursors.down.on('up', () => cevents.emit("up", "shove"), this);
-        }
-
-        cevents.on("down", this.receivedDown, this);
-        cevents.on("up", this.receivedUp, this);
-    }
-
-    receivedDown(action: string, repeater: Repeater): void {
-        // Only add if it isn't already in the map, because if there were two
-        // different inputs to the same action, and both inputs were activated
-        // at different times, the later of the two would "reset" the repeater
-        // counter, which we don't want.
-        if (!(action in this.controlies)) {
-            this.controlies[action] = repeater;
-        }
-    }
-
-    receivedUp(action: string): void {
-        // We do not delete it here, but later at the update. Among other
-        // effects, this allows a single down/up combo in a single tick to
-        // still fire the action.
-        if (action in this.controlies) {
-            this.controlies[action].released = true;
-        }
-    }
-
-    update(time: number, delta: number): void {
-        for (const [k, v] of Object.entries(this.controlies)) {
-            if (v !== null && typeof v.shouldFire === 'function') {
-                if (v.shouldFire(time, delta)) {
-                    this.controlsEvents.emit("action", k);
-                }
-                if (v.released) {
-                    delete this.controlies[k];
-                }
-            }
-        }
-    }
-}
+import { GameControls } from "controls";
 
 class SceneGrid extends Phaser.Scene implements Board, SceneStuff {
     tickDuration = 1000 / 60;
@@ -457,13 +341,13 @@ const GAME = new Phaser.Game(config);
 
 let counter = new TargetTotals();
 let gameSettings: GameSettings = { level: 0, speed: 40 };
-let gameThingies: GameThingies = { gameSettings: gameSettings, targetTotals: counter, controlsState: new ControlsState(), controlsEvents: new Phaser.Events.EventEmitter(), boardEvents: new Phaser.Events.EventEmitter() };
+let gameThingies: GameThingies = { gameSettings: gameSettings, targetTotals: counter, controlsEvents: new Phaser.Events.EventEmitter(), boardEvents: new Phaser.Events.EventEmitter() };
 
 GAME.scene.add('SceneBackground', SceneBackground, true);
 GAME.scene.add('SceneTargetTotals', SceneTargetTotals, true, { targetTotals: counter });
 GAME.scene.add('SceneNextCells', SceneNextCells, true, gameThingies);
 GAME.scene.add('SceneLevelInfo', SceneLevelInfo, true, gameThingies);
-GAME.scene.add('Controls', GameControls, true, gameThingies);
+GAME.scene.add('Controls', GameControls, true, gameThingies.controlsEvents);
 GAME.scene.add('SceneGrid', SceneGrid, true, gameThingies);
 GAME.scene.add('SceneMultitouch', SceneMultitouch, true, gameThingies);
 GAME.scene.add('SceneLevelClear', SceneLevelClear, false, gameThingies);

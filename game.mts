@@ -13,22 +13,9 @@ export interface GameSettings {
     speed: number;
 }
 
-export class ControlsState {
-    leftPressed = false;
-    leftPressedTicks = 0;
-    rightPressed = false;
-    rightPressedTicks = 0;
-    shovePressed = false;
-    shovePressedTicks = 0;
-    // Rotates are non-repeating, so this only applies to a single tick
-    rotateCw = false;
-    rotateCcw = false;
-}
-
 export interface GameThingies {
     gameSettings: GameSettings;
     targetTotals: TargetTotals;
-    controlsState: ControlsState;
     controlsEvents: Phaser.Events.EventEmitter;
     boardEvents: Phaser.Events.EventEmitter;
 }
@@ -69,7 +56,7 @@ export const LEVELS: Level[] = [
     { numTargets: 84, highestRow: 13 },
 ];
 
-export enum GameState {
+enum GameState {
     Pregame = 1, // Game hasn't started yet (counting down, whatever)
     Releasing, // The active cells are preparing into the grid
     Active, // The player can control the active cells

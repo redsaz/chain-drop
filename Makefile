@@ -1,12 +1,12 @@
 default: target
 
 all: target
-target: target/index.html target/app.css target/app.mjs target/gameboard.mjs target/game.mjs target/scenes.mjs target/consts.mjs target/assets/pics target/dist/phaser.js
+target: target/index.html target/app.css target/app.mjs target/gameboard.mjs target/game.mjs target/scenes.mjs target/controls.mjs target/consts.mjs target/assets/pics target/dist/phaser.js
 target/index.html: index.html
 	cp -f index.html target/
 target/app.css: app.css
 	cp -f app.css target/
-target/app.mjs: app.mts gameboard.mts game.mts scenes.mts consts.mts tsconfig.json
+target/app.mjs: app.mts gameboard.mts game.mts scenes.mts controls.mts consts.mts tsconfig.json
 	tsc
 	find ./target -iname '*.mjs' -exec sed -Ei 's/from "([^"]*)"/from ".\/\1.mjs"/' '{}' ';'
     

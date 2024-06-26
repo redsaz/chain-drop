@@ -48,6 +48,7 @@
       "gameboard": ["gameboard.mts"],
       "game": ["./game.mts"],
       "scenes": ["./scenes.mts"],
+      "controls": ["./controls.mts"],
       "consts": ["./consts.mts"],
       // Optional: point bare specifier imports to an empty file
       // to prohibit importing from node_modules specifiers not listed here:
