@@ -4,22 +4,25 @@
 import { SceneBackground, SceneTargetTotals, SceneNextCells, SceneLevelInfo, SceneMultitouch, SceneLevelClear, SceneLevelLost, SceneLevelDoneMenu } from "scenes";
 import * as consts from "consts";
 import { GameThingies, GameSettings, TargetTotals, SceneStuff, LEVELS, SinglePlayerGame, ActionEvent } from "game";
-import { Board, GameBoard } from "gameboard";
+import { BoardListener } from "gameboard";
 import { GameControls } from "controls";
 
-class SceneGrid extends Phaser.Scene implements Board, SceneStuff {
+interface CellSprite extends Phaser.GameObjects.Sprite {
+    cellValue?: integer;
+}
+
+class SceneGrid extends Phaser.Scene implements SceneStuff, BoardListener {
     tickDuration = 1000 / 60;
     ticksLeftover: number = 0; // sometimes a little extra or a little less delta is between updates.
     gameThingies: GameThingies | undefined;
 
     gameLogic: SinglePlayerGame = new SinglePlayerGame(new TargetTotals(), 0);
-    board: GameBoard = new GameBoard();
 
-    gridDisplay: (Phaser.GameObjects.Sprite | null)[] = Array(this.board.gridRows * this.board.gridCols);
-    cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[] = Array();
+    gridDisplay: (CellSprite | null)[] = Array(this.gameLogic.board.gridRows * this.gameLogic.board.gridCols);
+    cellsActiveDisplay: (CellSprite | null)[] = Array();
 
-    cellToScene(row: integer, col: integer, cellValue: integer): Phaser.GameObjects.Sprite | null {
-        let sprite: Phaser.GameObjects.Sprite;
+    cellToScene(row: integer, col: integer, cellValue: integer): CellSprite | null {
+        let sprite: CellSprite;
         // cols go from left (0) to right (7)
         let xPos = this.colToX(col);
         // rows go from bottom (0) to top (15), which is reverse of how pixels are done.
@@ -61,10 +64,12 @@ class SceneGrid extends Phaser.Scene implements Board, SceneStuff {
         }
         sprite.setTint(color);
 
+        sprite.cellValue = cellValue;
+
         return sprite;
     }
 
-    cellActiveToScene(row: integer, col: integer, rotation: integer, index: number, cellValue: integer): Phaser.GameObjects.Sprite | null {
+    cellActiveToScene(row: integer, col: integer, rotation: integer, index: number, cellValue: integer): CellSprite | null {
         let abs = this.cellActiveGetPosAbsolute(row, col, rotation, index, cellValue);
         return this.cellToScene(abs[0], abs[1], abs[2]);
     }
@@ -104,7 +109,7 @@ class SceneGrid extends Phaser.Scene implements Board, SceneStuff {
         return [row, col, cellValue];
     }
 
-    cellActiveUpdatePos(row: integer, col: integer, rotation: integer, index: number, sprite: Phaser.GameObjects.Sprite | null): void {
+    cellActiveUpdatePos(row: integer, col: integer, rotation: integer, index: number, sprite: CellSprite | null): void {
         if (sprite == null) {
             return;
         }
@@ -137,68 +142,30 @@ class SceneGrid extends Phaser.Scene implements Board, SceneStuff {
         return 544 - (row * 32 + 16);
     }
 
-    numGridRows(): number {
-        return this.board.numGridRows();
-    }
+    constructor(config?: Phaser.Types.Core.GameConfig) {
+        super(config ?? { key: 'SceneGrid', active: true });
 
-    numGridCols(): number {
-        return this.board.numGridCols();
-    }
-
-    gridGet(row: number, col: number): number {
-        return this.board.gridGet(row, col);
-    }
-
-    gridSet(row: number, col: number, cellValue: integer) {
-        let oldCell = this.board.gridSet(row, col, cellValue);
-        let index = row * this.board.gridCols + col;
-        if (oldCell != cellValue) {
-            let sprite = this.gridDisplay[index];
-            if (sprite != null) {
-                sprite.destroy();
-            }
-            this.gridDisplay[index] = this.cellToScene(row, col, cellValue);
+        const numCells = this.gameLogic.board.gridRows * this.gameLogic.board.gridCols;
+        for (let i = 0; i < numCells; ++i) {
+            this.gridDisplay[i] = null;
         }
     }
 
-    gridMove(row: number, col: number, rowChange: number, colChange: number) {
-        let oldTargetCell = this.board.gridMove(row, col, rowChange, colChange);
-        let sourceIndex = this.board.gridIndex(row, col);
-        let targetIndex = this.board.gridIndex(row + rowChange, col + colChange);
-        if (oldTargetCell != consts.CELL_EMPTY) {
-            let sprite = this.gridDisplay[targetIndex];
-            sprite?.destroy();
-        }
-        this.gridDisplay[targetIndex] = this.gridDisplay[sourceIndex];
-        this.gridDisplay[sourceIndex] = null;
-        this.gridDisplay[targetIndex]?.setPosition(this.colToX(col + colChange), this.rowToY(row + rowChange));
+    receivedAction(actionEvent: ActionEvent): void {
+        this.gameLogic.pushActionEvent(actionEvent);
     }
 
-    // Deletes the cell at the location, and "unjoins" any cells joined to that cell.
-    gridDelete(fancy: boolean, row: number, col: number): integer {
-        let old = this.board.gridGet(row, col);
-        // If cell is connected above, remove that cell's respective join.
-        if ((old & consts.CELL_JOINED_TOP) != 0) {
-            this.gridSet(row + 1, col, this.board.gridGet(row + 1, col) & ~consts.CELL_JOINED_BOTTOM);
+    setCell(row: number, col: number, cellValue: number): void {
+        let index = row * this.gameLogic.board.gridCols + col;
+        let sprite = this.gridDisplay[index];
+        if (sprite != null) {
+            sprite.destroy();
         }
-        // If cell is connected right, remove that cell's respective join.
-        if ((old & consts.CELL_JOINED_RIGHT) != 0) {
-            this.gridSet(row, col + 1, this.board.gridGet(row, col + 1) & ~consts.CELL_JOINED_LEFT);
-        }
-        // If cell is connected below, remove that cell's respective join.
-        if ((old & consts.CELL_JOINED_BOTTOM) != 0) {
-            this.gridSet(row - 1, col, this.board.gridGet(row - 1, col) & ~consts.CELL_JOINED_TOP);
-        }
-        // If cell is connected left, remove that cell's respective join.
-        if ((old & consts.CELL_JOINED_LEFT) != 0) {
-            this.gridSet(row, col - 1, this.board.gridGet(row, col - 1) & ~consts.CELL_JOINED_RIGHT);
-        }
+        this.gridDisplay[index] = this.cellToScene(row, col, cellValue);
+    }
 
-        // Fancy delete the given cell
-        let index = this.board.gridIndex(row, col);
-        let oldCell = this.board.grid[index];
-        if (oldCell != consts.CELL_EMPTY) {
-            this.board.grid[index] = consts.CELL_EMPTY;
+    deleteCell(fancy: boolean, row: number, col: number): void {
+        let index = this.gameLogic.board.gridIndex(row, col);
             let sprite = this.gridDisplay[index];
             if (fancy) {
                 this.tweens.add({
@@ -214,40 +181,19 @@ class SceneGrid extends Phaser.Scene implements Board, SceneStuff {
             } else {
                 sprite?.destroy();
             }
+    }
+
+    moveCell(row: number, col: number, rowChange: number, colChange: number): void {
+        let sourceIndex = this.gameLogic.board.gridIndex(row, col);
+        let targetIndex = this.gameLogic.board.gridIndex(row + rowChange, col + colChange);
+        let oldTargetCell = this.gridDisplay[targetIndex];
+        if (oldTargetCell != null && oldTargetCell?.cellValue != consts.CELL_EMPTY) {
+            oldTargetCell.destroy();
         }
 
-        return old;
-    }
-
-    // Returns sets of cells to clear from the board (but doesn't clear them itself).
-    // Only settled cells are considered for clearing.
-    getCellsToClear(): [integer, integer][][] {
-        return this.board.getCellsToClear();
-    }
-
-    cellsActiveCanMove(posRow: number, posCol: number, rotation: number): boolean {
-        return this.board.cellsActiveCanMove(posRow, posCol, rotation);
-    }
-
-    sameType(cell: integer, ...cells: integer[]): boolean {
-        return this.board.sameType(cell, ...cells);
-    }
-
-    canPlaceTarget(row: number, col: number, cell: integer): boolean {
-        return this.board.canPlaceTarget(row, col, cell);
-    }
-
-    constructor(config?: Phaser.Types.Core.GameConfig) {
-        super(config ?? { key: 'SceneGrid', active: true });
-
-        for (let i = 0; i < this.board.gridRows * this.board.gridCols; ++i) {
-            this.board.grid[i] = consts.CELL_EMPTY;
-            this.gridDisplay[i] = null;
-        }
-    }
-
-    receivedAction(actionEvent: ActionEvent): void {
-        this.gameLogic.pushActionEvent(actionEvent);
+        this.gridDisplay[targetIndex] = this.gridDisplay[sourceIndex];
+        this.gridDisplay[sourceIndex] = null;
+        this.gridDisplay[targetIndex]?.setPosition(this.colToX(col + colChange), this.rowToY(row + rowChange));
     }
 
     startup(data: GameThingies): void {
@@ -255,41 +201,13 @@ class SceneGrid extends Phaser.Scene implements Board, SceneStuff {
             data.controlsEvents.on("action", this.receivedAction, this);
         }
 
+        this.add.rectangle(128, 272, 256, 544, 0, 0.5);
         this.gameThingies = data;
         this.gameLogic = new SinglePlayerGame(data.targetTotals, data.gameSettings.level);
+        this.gameLogic.setBoardListener(this);
         let level = LEVELS[Math.min(this.gameLogic.level, 20)];
         let numTargets = level.numTargets;
-        this.board.grid.forEach((item, i, arr) => arr[i] = consts.CELL_EMPTY);
-        this.add.rectangle(128, 272, 256, 544, 0, 0.5);
-        // Add some targets on the board
-        let maxRow = level.highestRow;
-        for (let i = 0; i < numTargets; ++i) {
-            let row = Math.floor(Math.random() * maxRow);
-            let col = Math.floor(Math.random() * (this.board.gridCols));
-            let target = consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)] | consts.CELL_TARGET;
-            let placed = false;
-            for (let attempts = 0; attempts < maxRow * this.board.gridCols; ++attempts) {
-                if (this.board.canPlaceTarget(row, col, target)) {
-                    this.gridSet(row, col, target);
-                    if ((target & consts.CELL_TYPE_MASK) == consts.CELL_1) {
-                        ++this.gameLogic.targetTotals.cell1;
-                    } else if ((target & consts.CELL_TYPE_MASK) == consts.CELL_2) {
-                        ++this.gameLogic.targetTotals.cell2;
-                    } else if ((target & consts.CELL_TYPE_MASK) == consts.CELL_3) {
-                        ++this.gameLogic.targetTotals.cell3;
-                    }
-                    break;
-                }
-                ++col;
-                if (col >= this.board.gridCols) {
-                    col = 0;
-                    --row;
-                    if (row < 0) {
-                        row = maxRow - 1;
-                    }
-                }
-            }
-        }
+        this.gameLogic.setupBoard(numTargets, level.highestRow);
         this.gameThingies.boardEvents.emit('newBoard', this.gameLogic.level);
         this.gameThingies.boardEvents.emit('newNext', this.gameLogic.cellsNext[0], this.gameLogic.cellsNext[1]);
     }
@@ -318,7 +236,7 @@ class SceneGrid extends Phaser.Scene implements Board, SceneStuff {
         this.ticksLeftover = ticksAndFraction - ticksToUpdate;
 
         for (let i = 0; i < ticksToUpdate; ++i) {
-            this.gameLogic.update(i == 0, this, this.gameThingies, this, this.cellsActiveDisplay, this.scene);
+            this.gameLogic.update(this, this.gameThingies, this.cellsActiveDisplay, this.scene);
         }
     }
 }

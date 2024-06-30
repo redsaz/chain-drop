@@ -1,5 +1,11 @@
 import * as consts from "consts";
 
+export interface BoardListener {
+    setCell(row: number, col: number, cellValue: integer): void,
+    deleteCell(fancy: boolean, row: number, col: number): void,
+    moveCell(srcRow: number, srcCol: number, rowChange: number, colChange: number): void,
+}
+
 export interface Board {
     gridGet(row: number, col: number): integer,
     gridSet(row: number, col: number, cellValue: integer): void,
@@ -27,9 +33,23 @@ export interface Board {
  * querying the game status.
  */
 export class GameBoard implements Board {
-    gridRows = 17;
-    gridCols = 8;
-    grid: integer[] = Array(this.gridRows * this.gridCols);
+    gridRows;
+    gridCols;
+    grid: integer[];
+    listener: BoardListener | null = null;
+
+    constructor(rows: number, cols: number) {
+        this.gridRows = rows;
+        this.gridCols = cols;
+        this.grid = Array(this.gridRows * this.gridCols);
+        for (let i = 0; i < this.grid.length; ++i) {
+            this.grid[i] = consts.CELL_EMPTY;
+        }
+    }
+
+    setListener(listener: BoardListener) {
+        this.listener = listener;
+    }
 
     numGridRows(): number {
         return this.gridRows;
@@ -47,11 +67,20 @@ export class GameBoard implements Board {
         return this.grid[this.gridIndex(row, col)];
     }
 
-    gridSet(row: number, col: number, cellValue: integer): integer {
+    #internalGridSet(row: number, col: number, cellValue: integer): integer {
         let index = this.gridIndex(row, col);
         let oldCell = this.grid[index];
         if (oldCell != cellValue) {
             this.grid[index] = cellValue;
+        }
+
+        return oldCell;
+    }
+
+    gridSet(row: number, col: number, cellValue: integer): integer {
+        let oldCell = this.#internalGridSet(row, col, cellValue);
+        if (oldCell != cellValue) {
+            this.listener?.setCell(row, col, cellValue);
         }
 
         return oldCell;
@@ -64,6 +93,7 @@ export class GameBoard implements Board {
         let oldTargetCell = this.grid[targetIndex];
         this.grid[targetIndex] = sourceCell;
         this.grid[sourceIndex] = consts.CELL_EMPTY;
+        this.listener?.moveCell(row, col, rowChange, colChange);
 
         return oldTargetCell;
     }
@@ -88,7 +118,8 @@ export class GameBoard implements Board {
             this.gridSet(row, col - 1, this.gridGet(row, col - 1) & ~consts.CELL_JOINED_RIGHT);
         }
 
-        this.gridSet(row, col, consts.CELL_EMPTY);
+        this.#internalGridSet(row, col, consts.CELL_EMPTY);
+        this.listener?.deleteCell(fancy, row, col);
 
         return old;
     }
