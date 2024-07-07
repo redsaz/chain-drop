@@ -3,7 +3,7 @@
 // @Filename: scenes.mts
 import { SceneBackground, SceneTargetTotals, SceneNextCells, SceneLevelInfo, SceneMultitouch, SceneLevelClear, SceneLevelLost, SceneLevelDoneMenu } from "scenes";
 import * as consts from "consts";
-import { GameThingies, GameSettings, TargetTotals, SceneStuff, LEVELS, SinglePlayerGame, ActionEvent } from "game";
+import { GameState, GameThingies, GameSettings, GameListener, TargetTotals, LEVELS, SinglePlayerGame, ActionEvent } from "game";
 import { BoardListener } from "gameboard";
 import { GameControls } from "controls";
 
@@ -11,12 +11,12 @@ interface CellSprite extends Phaser.GameObjects.Sprite {
     cellValue?: integer;
 }
 
-class SceneGrid extends Phaser.Scene implements SceneStuff, BoardListener {
+class SceneGrid extends Phaser.Scene implements BoardListener, GameListener {
     tickDuration = 1000 / 60;
     ticksLeftover: number = 0; // sometimes a little extra or a little less delta is between updates.
     gameThingies: GameThingies | undefined;
 
-    gameLogic: SinglePlayerGame = new SinglePlayerGame(new TargetTotals(), 0);
+    gameLogic: SinglePlayerGame = new SinglePlayerGame(new TargetTotals(), 0, this);
 
     gridDisplay: (CellSprite | null)[] = Array(this.gameLogic.board.gridRows * this.gameLogic.board.gridCols);
     cellsActiveDisplay: (CellSprite | null)[] = Array();
@@ -70,66 +70,8 @@ class SceneGrid extends Phaser.Scene implements SceneStuff, BoardListener {
     }
 
     cellActiveToScene(row: integer, col: integer, rotation: integer, index: number, cellValue: integer): CellSprite | null {
-        let abs = this.cellActiveGetPosAbsolute(row, col, rotation, index, cellValue);
+        let abs = this.gameLogic.cellActiveGetPosAbsolute(row, col, rotation, index, cellValue);
         return this.cellToScene(abs[0], abs[1], abs[2]);
-    }
-
-    cellActiveGetPosAbsolute(row: integer, col: integer, rotation: integer, index: number, cellValue: integer): [integer, integer, integer] {
-        // In 0th rotation, first cell is at the row and col, second cell is to the right.
-        let join1 = 0;
-        let join2 = 0;
-        if (rotation == 0) {
-            col += index;
-            join1 = consts.CELL_JOINED_RIGHT;
-            join2 = consts.CELL_JOINED_LEFT;
-        } else if (rotation == 1) {
-            // In 1st rotation, first cell is above, second cell is at row and col.
-            row += 1 - index;
-            join1 = consts.CELL_JOINED_BOTTOM;
-            join2 = consts.CELL_JOINED_TOP;
-        } else if (rotation == 2) {
-            // In 2nd rotation, first cell is to the right, second cell is at row and col.
-            col += 1 - index;
-            join1 = consts.CELL_JOINED_LEFT;
-            join2 = consts.CELL_JOINED_RIGHT;
-        } else if (rotation == 3) {
-            // In 3rd rotation, first cell is at row and col, second cell is above.
-            row += index;
-            join1 = consts.CELL_JOINED_TOP;
-            join2 = consts.CELL_JOINED_BOTTOM;
-        }
-
-        // Use the correct join depending on which active cell we're looking at
-        cellValue &= consts.CELL_TYPE_MASK;
-        if (index == 0) {
-            cellValue |= join1;
-        } else {
-            cellValue |= join2;
-        }
-        return [row, col, cellValue];
-    }
-
-    cellActiveUpdatePos(row: integer, col: integer, rotation: integer, index: number, sprite: CellSprite | null): void {
-        if (sprite == null) {
-            return;
-        }
-
-        // In 0th rotation, first cell is at the row and col, second cell is to the right.
-        let join1 = 0;
-        let join2 = 0;
-        if (rotation == 0) {
-            col += index;
-        } else if (rotation == 1) {
-            // In 1st rotation, first cell is above, second cell is at row and col.
-            row += 1 - index;
-        } else if (rotation == 2) {
-            // In 2nd rotation, first cell is to the right, second cell is at row and col.
-            col += 1 - index;
-        } else if (rotation == 3) {
-            // In 3rd rotation, first cell is at row and col, second cell is above.
-            row += index;
-        }
-        sprite.setPosition(this.colToX(col), this.rowToY(row) + 4);
     }
 
     colToX(col: integer): integer {
@@ -166,21 +108,21 @@ class SceneGrid extends Phaser.Scene implements SceneStuff, BoardListener {
 
     deleteCell(fancy: boolean, row: number, col: number): void {
         let index = this.gameLogic.board.gridIndex(row, col);
-            let sprite = this.gridDisplay[index];
-            if (fancy) {
-                this.tweens.add({
-                    targets: sprite,
-                    alpha: 0,
-                    scaleX: 0,
-                    scaleY: 0,
-                    persist: false,
-                    duration: 250,
-                    callbackScope: sprite,
-                    onComplete: () => sprite?.destroy()
-                });
-            } else {
-                sprite?.destroy();
-            }
+        let sprite = this.gridDisplay[index];
+        if (fancy) {
+            this.tweens.add({
+                targets: sprite,
+                alpha: 0,
+                scaleX: 0,
+                scaleY: 0,
+                persist: false,
+                duration: 250,
+                callbackScope: sprite,
+                onComplete: () => sprite?.destroy()
+            });
+        } else {
+            sprite?.destroy();
+        }
     }
 
     moveCell(row: number, col: number, rowChange: number, colChange: number): void {
@@ -196,6 +138,32 @@ class SceneGrid extends Phaser.Scene implements SceneStuff, BoardListener {
         this.gridDisplay[targetIndex]?.setPosition(this.colToX(col + colChange), this.rowToY(row + rowChange));
     }
 
+    newNext(left: integer, right: integer): void {
+        console.log(`newNext left=${left} right=${right}`);
+        this.gameThingies?.boardEvents.emit('newNext', left, right);
+    }
+
+    moveActive(activeCells: integer[], row: number, col: number, rot: number): void {
+        console.log(`moveActive activeCells=${activeCells} row=${row} col=${col}, rot=${rot}`);
+        // Update display
+        // Delete the current sprites then create new ones at correct position
+        while (this.cellsActiveDisplay.length) {
+            this.cellsActiveDisplay.shift()?.destroy();
+        }
+        activeCells.forEach((cell, index) => this.cellsActiveDisplay.push(this.cellActiveToScene(row, col, rot, index, cell)));
+    }
+
+    updatedState(state: GameState): void {
+        console.log(`updatedState ${state}`);
+        // Do not show active piece if not currently active.
+        if (state != GameState.Active) {
+            // Delete the active sprites
+            while (this.cellsActiveDisplay.length) {
+                this.cellsActiveDisplay.shift()?.destroy();
+            }
+        }
+    }
+
     startup(data: GameThingies): void {
         if (this.gameThingies?.controlsEvents != data.controlsEvents) {
             data.controlsEvents.on("action", this.receivedAction, this);
@@ -203,13 +171,12 @@ class SceneGrid extends Phaser.Scene implements SceneStuff, BoardListener {
 
         this.add.rectangle(128, 272, 256, 544, 0, 0.5);
         this.gameThingies = data;
-        this.gameLogic = new SinglePlayerGame(data.targetTotals, data.gameSettings.level);
+        this.gameLogic = new SinglePlayerGame(data.targetTotals, data.gameSettings.level, this);
         this.gameLogic.setBoardListener(this);
         let level = LEVELS[Math.min(this.gameLogic.level, 20)];
         let numTargets = level.numTargets;
         this.gameLogic.setupBoard(numTargets, level.highestRow);
         this.gameThingies.boardEvents.emit('newBoard', this.gameLogic.level);
-        this.gameThingies.boardEvents.emit('newNext', this.gameLogic.cellsNext[0], this.gameLogic.cellsNext[1]);
     }
 
     preload(): void {
@@ -236,7 +203,7 @@ class SceneGrid extends Phaser.Scene implements SceneStuff, BoardListener {
         this.ticksLeftover = ticksAndFraction - ticksToUpdate;
 
         for (let i = 0; i < ticksToUpdate; ++i) {
-            this.gameLogic.update(this, this.gameThingies, this.cellsActiveDisplay, this.scene);
+            this.gameLogic.update(this.scene);
         }
     }
 }

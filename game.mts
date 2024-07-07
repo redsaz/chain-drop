@@ -25,13 +25,6 @@ export interface Level {
     highestRow: integer;
 }
 
-export interface SceneStuff {
-    cellToScene(row: integer, col: integer, cellValue: integer): Phaser.GameObjects.Sprite | null, cellActiveToScene(row: integer, col: integer, rotation: integer, index: number, cellValue: integer): Phaser.GameObjects.Sprite | null,
-    cellActiveGetPosAbsolute(row: integer, col: integer, rotation: integer, index: number, cellValue: integer): [integer, integer, integer], cellActiveUpdatePos(row: integer, col: integer, rotation: integer, index: number, sprite: Phaser.GameObjects.Sprite | null): void,
-    colToX(col: integer): integer,
-    rowToY(row: integer): integer,
-}
-
 export const LEVELS: Level[] = [
     { numTargets: 4, highestRow: 10 },
     { numTargets: 8, highestRow: 10 },
@@ -56,7 +49,7 @@ export const LEVELS: Level[] = [
     { numTargets: 84, highestRow: 13 },
 ];
 
-enum GameState {
+export enum GameState {
     Pregame = 1, // Game hasn't started yet (counting down, whatever)
     Releasing, // The active cells are preparing into the grid
     Active, // The player can control the active cells
@@ -67,12 +60,19 @@ enum GameState {
 
 export type ActionEvent = "noop" | "left" | "right" | "rotateCcw" | "rotateCw" | "shove";
 
+export interface GameListener {
+    newNext(left: integer, right: integer): void;
+    moveActive(activeCells: integer[], row: number, col: number, rot: number): void;
+    updatedState(state: GameState): void;
+}
+
 export class SinglePlayerGame {
     #tick: number = 0; // The current logical "frame" the game is at (not graphical frame)
     // TODO: Make gameState be private #gameState and handle state logic within.
     // TODO: Make the rest private as well.
     gameState: GameState = GameState.Pregame;
     board: GameBoard;
+    #listener: GameListener;
     level = 0;
     startRow = 15;
     startCol = 3;
@@ -88,11 +88,12 @@ export class SinglePlayerGame {
     #settleCounter = 0;
     #actionEvents: ActionEvent[] = Array();
 
-    constructor(targetTotals: TargetTotals, level: number) {
+    constructor(targetTotals: TargetTotals, level: number, listener: GameListener) {
         this.gameState = GameState.Pregame;
         this.board = new GameBoard(17, 8);
         this.targetTotals = targetTotals;
         this.level = level;
+        this.#listener = listener;
         this.cellsNext.length = 0;
         this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
         this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
@@ -102,11 +103,12 @@ export class SinglePlayerGame {
         this.activeRotation = 0;
     }
 
-    setBoardListener(listener : BoardListener) {
+    setBoardListener(listener: BoardListener) {
         this.board.setListener(listener);
     }
 
     setupBoard(numTargets: number, maxRow: number) {
+        this.#listener.newNext(this.cellsNext[0], this.cellsNext[1]);
         // Add some targets on the board
         for (let i = 0; i < numTargets; ++i) {
             let row = Math.floor(Math.random() * maxRow);
@@ -136,9 +138,44 @@ export class SinglePlayerGame {
         }
     }
 
-    #activeSet(stuff: SceneStuff, cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[]): void {
+    cellActiveGetPosAbsolute(row: integer, col: integer, rotation: integer, index: number, cellValue: integer): [integer, integer, integer] {
+        // In 0th rotation, first cell is at the row and col, second cell is to the right.
+        let join1 = 0;
+        let join2 = 0;
+        if (rotation == 0) {
+            col += index;
+            join1 = consts.CELL_JOINED_RIGHT;
+            join2 = consts.CELL_JOINED_LEFT;
+        } else if (rotation == 1) {
+            // In 1st rotation, first cell is above, second cell is at row and col.
+            row += 1 - index;
+            join1 = consts.CELL_JOINED_BOTTOM;
+            join2 = consts.CELL_JOINED_TOP;
+        } else if (rotation == 2) {
+            // In 2nd rotation, first cell is to the right, second cell is at row and col.
+            col += 1 - index;
+            join1 = consts.CELL_JOINED_LEFT;
+            join2 = consts.CELL_JOINED_RIGHT;
+        } else if (rotation == 3) {
+            // In 3rd rotation, first cell is at row and col, second cell is above.
+            row += index;
+            join1 = consts.CELL_JOINED_TOP;
+            join2 = consts.CELL_JOINED_BOTTOM;
+        }
+
+        // Use the correct join depending on which active cell we're looking at
+        cellValue &= consts.CELL_TYPE_MASK;
+        if (index == 0) {
+            cellValue |= join1;
+        } else {
+            cellValue |= join2;
+        }
+        return [row, col, cellValue];
+    }
+
+    #activeSet(): void {
         this.#cellsActive.forEach((cell, index) => {
-            let abs = stuff.cellActiveGetPosAbsolute(this.activePosRow, this.activePosCol, this.activeRotation, index, cell);
+            let abs = this.cellActiveGetPosAbsolute(this.activePosRow, this.activePosCol, this.activeRotation, index, cell);
             this.board.gridSet(abs[0], abs[1], abs[2]);
         });
 
@@ -146,11 +183,6 @@ export class SinglePlayerGame {
         for (let col = 0; col < this.board.numGridCols(); ++col) {
             this.board.gridDelete(false, this.board.numGridRows() - 1, col);
             this.board.gridDelete(false, this.board.numGridRows() - 1, col);
-        }
-
-        // Delete the active sprites
-        while (cellsActiveDisplay.length) {
-            cellsActiveDisplay.shift()?.destroy();
         }
     }
 
@@ -168,7 +200,7 @@ export class SinglePlayerGame {
         }
     }
 
-    #rotate(amount: integer, stuff: SceneStuff, cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[]): void {
+    #rotate(amount: integer): void {
         // Can only rotate when active cell is in play
         if (this.gameState != GameState.Active) {
             return;
@@ -186,12 +218,7 @@ export class SinglePlayerGame {
             this.activeRotation = rotation;
             this.activePosCol = posCol;
 
-            // Update display
-            // Delete the current sprites then create new ones at correct position
-            while (cellsActiveDisplay.length) {
-                cellsActiveDisplay.shift()?.destroy();
-            }
-            this.#cellsActive.forEach((cell, index) => cellsActiveDisplay.push(stuff.cellActiveToScene(this.activePosRow, this.activePosCol, this.activeRotation, index, cell)));
+            this.#listener.moveActive(this.#cellsActive, this.activePosRow, this.activePosCol, this.activeRotation);
         }
     }
 
@@ -231,7 +258,7 @@ export class SinglePlayerGame {
         return dropped;
     }
 
-    #activeStateUpdate(stuff: SceneStuff, gameThingies: GameThingies | undefined, cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[], scene: Phaser.Scenes.ScenePlugin): void {
+    #activeStateUpdate(): void {
 
         ++this.#dropCounter;
 
@@ -257,10 +284,10 @@ export class SinglePlayerGame {
                     }
                     break;
                 case "rotateCcw":
-                    this.#rotate(-1, stuff, cellsActiveDisplay);
+                    this.#rotate(-1);
                     break;
                 case "rotateCw":
-                    this.#rotate(1, stuff, cellsActiveDisplay);
+                    this.#rotate(1);
                     break;
                 case "shove":
                     if (this.board.cellsActiveCanMove(this.activePosRow - 1, this.activePosCol, this.activeRotation)) {
@@ -289,21 +316,21 @@ export class SinglePlayerGame {
         }
 
         if (shouldSettle) {
-            this.#activeSet(stuff, cellsActiveDisplay);
+            this.#activeSet();
             this.gameState = GameState.Settle;
             changed = true;
         }
 
         // Update the positions of the active cells if anything changed
-        if (changed) {
-            cellsActiveDisplay.forEach((sprite: Phaser.GameObjects.Sprite | null, index) =>
-                stuff.cellActiveUpdatePos(this.activePosRow, this.activePosCol, this.activeRotation, index, sprite));
+        if (changed && this.gameState == GameState.Active) {
+            this.#listener.moveActive(this.#cellsActive, this.activePosRow, this.activePosCol, this.activeRotation);
         }
     }
 
-    update(stuff: SceneStuff, gameThingies: GameThingies | undefined, cellsActiveDisplay: (Phaser.GameObjects.Sprite | null)[], scene: Phaser.Scenes.ScenePlugin) {
+    update(scene: Phaser.Scenes.ScenePlugin) {
         ++this.#tick;
-        switch (this.gameState) {
+        const currentState = this.gameState;
+        switch (currentState) {
             case GameState.Pregame: {
                 // This is normally used to set up the board, but it kinda already is,
                 // so we do nothing but start the game... for now.
@@ -318,7 +345,7 @@ export class SinglePlayerGame {
                     this.cellsNext.length = 0;
                     this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
                     this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
-                    gameThingies?.boardEvents.emit('newNext', this.cellsNext[0], this.cellsNext[1]);
+                    this.#listener.newNext(this.cellsNext[0], this.cellsNext[1]);
                 }
                 if (this.#releaseCounter < 45) {
                     ++this.#releaseCounter;
@@ -336,7 +363,7 @@ export class SinglePlayerGame {
                     this.activePosRow = this.startRow;
                     this.activePosCol = this.startCol;
                     this.activeRotation = 0;
-                    this.#cellsActive.forEach((cell, index) => cellsActiveDisplay.push(stuff.cellActiveToScene(this.activePosRow, this.activePosCol, this.activeRotation, index, cell)));
+                    this.#listener.moveActive(this.#cellsActive, this.activePosRow, this.activePosCol, this.activeRotation);
 
                     if (start1 != consts.CELL_EMPTY || start2 != consts.CELL_EMPTY) {
                         this.gameState = GameState.DoneLost;
@@ -349,7 +376,7 @@ export class SinglePlayerGame {
                 // and we must process 2 or more ticks in an update (that is, if we expect 60
                 // fps but are only getting 15, then we're doing 4 loop iterations every
                 // update to keep the speed correct.)
-                this.#activeStateUpdate(stuff, gameThingies, cellsActiveDisplay, scene);
+                this.#activeStateUpdate();
                 break;
             }
             case GameState.Settle: {
@@ -407,5 +434,9 @@ export class SinglePlayerGame {
         }
         // Some game states must ignore player actions, so discard any queued actions.
         this.#actionEvents.length = 0;
+
+        if (currentState != this.gameState) {
+            this.#listener.updatedState(this.gameState);
+        }
     }
 }
