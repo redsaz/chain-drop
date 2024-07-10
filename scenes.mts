@@ -1,4 +1,5 @@
 import * as consts from "consts";
+import { SingleFire, RepeatFire, SHIFT_TICKS_DELAY, SHIFT_TICKS_RATE, SHOVE_TICKS } from "controls";
 import { GameThingies, TargetTotals } from "game";
 
 export class SceneBackground extends Phaser.Scene {
@@ -56,37 +57,45 @@ export class SceneMultitouch extends Phaser.Scene {
         this.input.on('pointermove', (pointer: Phaser.Input.Pointer) => this.pointer(pointer));
         this.input.on('pointerdown', (pointer: Phaser.Input.Pointer) => this.pointer(pointer));
         this.input.on('pointerup', (pointer: Phaser.Input.Pointer) => this.pointer(pointer));
+        // cursors.space.on('down', () => this.#events.emit("down", "rotateCcw", new SingleFire()), this);
+        // cursors.up.on('down', () => this.#events.emit("down", "rotateCw", new SingleFire()), this);
+        // cursors.left.on('down', () => this.#events.emit("down", "left", new RepeatFire(SHIFT_TICKS_DELAY, SHIFT_TICKS_RATE)), this);
+        // cursors.left.on('up', () => this.#events.emit("up", "left"), this);
+        // cursors.right.on('down', () => this.#events.emit("down", "right", new RepeatFire(SHIFT_TICKS_DELAY, SHIFT_TICKS_RATE)), this);
+        // cursors.right.on('up', () => this.#events.emit("up", "right"), this);
+        // cursors.down.on('down', () => this.#events.emit("down", "shove", new RepeatFire(SHOVE_TICKS, SHOVE_TICKS)), this);
+        // cursors.down.on('up', () => this.#events.emit("up", "shove"), this);
 
         left.on(this.press, (pointer: Phaser.Input.Pointer) => {
             left.setTint(0xffffff);
-            this.controlsEvents.emit('_internal_leftpressed');
+            this.controlsEvents.emit("down", "left", new RepeatFire(SHIFT_TICKS_DELAY, SHIFT_TICKS_RATE));
         });
         left.on(this.release, (pointer: Phaser.Input.Pointer) => {
             left.setTint(consts.CELL_1_COLOR);
-            this.controlsEvents.emit('_internal_leftreleased');
+            this.controlsEvents.emit("up", "left");
         });
 
         right.on(this.press, (pointer: Phaser.Input.Pointer) => {
             right.setTint(0xffffff);
-            this.controlsEvents.emit('_internal_rightpressed');
+            this.controlsEvents.emit("down", "right", new RepeatFire(SHIFT_TICKS_DELAY, SHIFT_TICKS_RATE));
         });
         right.on(this.release, (pointer: Phaser.Input.Pointer) => {
             right.setTint(consts.CELL_2_COLOR);
-            this.controlsEvents.emit('_internal_rightreleased');
+            this.controlsEvents.emit("up", "right");
         });
 
         shove.on(this.press, (pointer: Phaser.Input.Pointer) => {
             shove.setTint(0xffffff);
-            this.controlsEvents.emit('_internal_shovepressed');
+            this.controlsEvents.emit("down", "shove", new RepeatFire(SHOVE_TICKS, SHOVE_TICKS));
         });
         shove.on(this.release, (pointer: Phaser.Input.Pointer) => {
             shove.setTint(0x00ffff);
-            this.controlsEvents.emit('_internal_shovereleased');
+            this.controlsEvents.emit("up", "shove");
         });
 
         rotateCcw.on(this.press, (pointer: Phaser.Input.Pointer) => {
             rotateCcw.setTint(0xffffff);
-            this.controlsEvents.emit('_internal_rotateccw');
+            this.controlsEvents.emit("down", "rotateCcw", new SingleFire());
         });
         rotateCcw.on(this.release, (pointer: Phaser.Input.Pointer) => {
             rotateCcw.setTint(consts.CELL_3_COLOR);
@@ -94,7 +103,7 @@ export class SceneMultitouch extends Phaser.Scene {
 
         rotateCw.on(this.press, (pointer: Phaser.Input.Pointer) => {
             rotateCw.setTint(0xffffff);
-            this.controlsEvents.emit('_internal_rotatecw');
+            this.controlsEvents.emit("down", "rotateCw", new SingleFire());
         });
         rotateCw.on(this.release, (pointer: Phaser.Input.Pointer) => {
             rotateCw.setTint(0xffff00);

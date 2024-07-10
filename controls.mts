@@ -1,15 +1,15 @@
 /// <reference path="types/phaser.d.ts"/>
 
-const SHIFT_TICKS_DELAY = 15;
-const SHIFT_TICKS_RATE = 6;
-const SHOVE_TICKS = 2;
+export const SHIFT_TICKS_DELAY = 15;
+export const SHIFT_TICKS_RATE = 6;
+export const SHOVE_TICKS = 2;
 
-interface Repeater {
+export interface Repeater {
     shouldFire(time: number, delta: number): boolean;
     released: boolean;
 }
 
-class SingleFire implements Repeater {
+export class SingleFire implements Repeater {
     fired: boolean = false;
     released: boolean = true;
 
@@ -19,7 +19,7 @@ class SingleFire implements Repeater {
     }
 }
 
-class RepeatFire implements Repeater {
+export class RepeatFire implements Repeater {
     released: boolean = false;
     ticksHeld: number = 0;
     delay: number = 0;
