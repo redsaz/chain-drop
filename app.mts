@@ -162,6 +162,25 @@ class SceneGrid extends Phaser.Scene implements BoardListener, GameListener {
                 this.cellsActiveDisplay.shift()?.destroy();
             }
         }
+        switch (state) {
+            case GameState.DoneLost: {
+                // TODO: This should not be instant.
+                if (!this.scene.isActive("SceneLevelLost")) {
+                    this.scene.run("SceneLevelLost")
+                }
+                break;
+            }
+            case GameState.DoneWon: {
+                // TODO: This should not be instant.
+                if (!this.scene.isActive("SceneLevelClear")) {
+                    this.scene.run("SceneLevelClear")
+                }
+                if (!this.scene.isActive("SceneLevelDoneMenu")) {
+                    this.scene.run("SceneLevelDoneMenu")
+                }
+                break;
+            }
+        }
     }
 
     startup(data: GameThingies): void {
@@ -203,7 +222,7 @@ class SceneGrid extends Phaser.Scene implements BoardListener, GameListener {
         this.ticksLeftover = ticksAndFraction - ticksToUpdate;
 
         for (let i = 0; i < ticksToUpdate; ++i) {
-            this.gameLogic.update(this.scene);
+            this.gameLogic.update();
         }
     }
 }

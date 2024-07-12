@@ -327,7 +327,7 @@ export class SinglePlayerGame {
         }
     }
 
-    update(scene: Phaser.Scenes.ScenePlugin) {
+    update() {
         ++this.#tick;
         const currentState = this.gameState;
         switch (currentState) {
@@ -366,6 +366,7 @@ export class SinglePlayerGame {
                     this.#listener.moveActive(this.#cellsActive, this.activePosRow, this.activePosCol, this.activeRotation);
 
                     if (start1 != consts.CELL_EMPTY || start2 != consts.CELL_EMPTY) {
+                        this.#activeSet();
                         this.gameState = GameState.DoneLost;
                     }
                 }
@@ -415,20 +416,11 @@ export class SinglePlayerGame {
                 break;
             }
             case GameState.DoneLost: {
-                // TODO: This should not be instant.
-                if (!scene.isActive("SceneLevelLost")) {
-                    scene.run("SceneLevelLost")
-                }
+                // Nothing to do.
                 break;
             }
             case GameState.DoneWon: {
-                // TODO: This should not be instant.
-                if (!scene.isActive("SceneLevelClear")) {
-                    scene.run("SceneLevelClear")
-                }
-                if (!scene.isActive("SceneLevelDoneMenu")) {
-                    scene.run("SceneLevelDoneMenu")
-                }
+                // Nothing to do.
                 break;
             }
         }
