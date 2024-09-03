@@ -1,6 +1,7 @@
 /// <reference path="types/phaser.d.ts"/>
 import * as consts from "consts";
 import { GameBoard, BoardListener } from "gameboard";
+import { Rand } from "chaindrop";
 
 export class TargetTotals {
     cell1 = 0;
@@ -15,6 +16,7 @@ export interface GameSettings {
 
 export interface GameThingies {
     gameSettings: GameSettings;
+    rand: Rand;
     targetTotals: TargetTotals;
     controlsEvents: Phaser.Events.EventEmitter;
     boardEvents: Phaser.Events.EventEmitter;
@@ -72,6 +74,7 @@ export class SinglePlayerGame {
     // TODO: Make the rest private as well.
     gameState: GameState = GameState.Pregame;
     board: GameBoard;
+    rand: Rand;
     #listener: GameListener;
     level = 0;
     startRow = 15;
@@ -88,15 +91,16 @@ export class SinglePlayerGame {
     #settleCounter = 0;
     #actionEvents: ActionEvent[] = Array();
 
-    constructor(targetTotals: TargetTotals, level: number, listener: GameListener) {
+    constructor(rand: Rand, targetTotals: TargetTotals, level: number, listener: GameListener) {
+        this.rand = rand;
         this.gameState = GameState.Pregame;
         this.board = new GameBoard(17, 8);
         this.targetTotals = targetTotals;
         this.level = level;
         this.#listener = listener;
         this.cellsNext.length = 0;
-        this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
-        this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
+        this.cellsNext.push(consts.CELL_TYPES[this.rand.next_int_bounded(consts.CELL_TYPES.length)]);
+        this.cellsNext.push(consts.CELL_TYPES[this.rand.next_int_bounded(consts.CELL_TYPES.length)]);
         // Init the active cells
         this.activePosRow = this.startRow;
         this.activePosCol = this.startCol;
@@ -111,9 +115,9 @@ export class SinglePlayerGame {
         this.#listener.newNext(this.cellsNext[0], this.cellsNext[1]);
         // Add some targets on the board
         for (let i = 0; i < numTargets; ++i) {
-            let row = Math.floor(Math.random() * maxRow);
-            let col = Math.floor(Math.random() * (this.board.gridCols));
-            let target = consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)] | consts.CELL_TARGET;
+            let row = Math.floor(this.rand.next_int_bounded(maxRow));
+            let col = Math.floor(this.rand.next_int_bounded(this.board.gridCols));
+            let target = consts.CELL_TYPES[this.rand.next_int_bounded(consts.CELL_TYPES.length)] | consts.CELL_TARGET;
             for (let attempts = 0; attempts < maxRow * this.board.gridCols; ++attempts) {
                 if (this.board.canPlaceTarget(row, col, target)) {
                     this.board.gridSet(row, col, target);
@@ -343,8 +347,8 @@ export class SinglePlayerGame {
                     this.#cellsActive.length = 0;
                     this.#cellsActive.push(this.cellsNext[0], this.cellsNext[1]);
                     this.cellsNext.length = 0;
-                    this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
-                    this.cellsNext.push(consts.CELL_TYPES[Math.floor(Math.random() * consts.CELL_TYPES.length)]);
+                    this.cellsNext.push(consts.CELL_TYPES[this.rand.next_int_bounded(consts.CELL_TYPES.length)]);
+                    this.cellsNext.push(consts.CELL_TYPES[this.rand.next_int_bounded(consts.CELL_TYPES.length)]);
                     this.#listener.newNext(this.cellsNext[0], this.cellsNext[1]);
                 }
                 if (this.#releaseCounter < 45) {

@@ -3,3 +3,7 @@
 
 *.swp
 target/
+**/target/
+
+# Do not track IDE settings
+.vscode/
